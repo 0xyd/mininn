@@ -53,5 +53,17 @@ int main(int argc, char *argv[]) {
 	printf("t->child[1]->x[9]: %f \n", t->child[1]->x[9]);
 	printf("t->child[1]->x[10]: %f \n", t->child[1]->x[10]);
 
+	// Add the output layer
+	t = kann_layer_cost(t, 1, KANN_C_CEB);
+
+	// BUG!
+	nn = kann_new(t, 0);
+
+	// 
+	// float *y;
+	// y = kann_apply1(nn, input);
+	// printf("y: %f \n", *y);
+	// printf("y: %f \n", y[0]);
+
 	return 0;
 }

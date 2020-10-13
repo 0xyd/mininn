@@ -1,8 +1,6 @@
 #ifndef IKANN_H
 #define IKANN_H
 
-#define KAD_VERSION "r544"
-
 #include <stdio.h>
 #include <stdint.h>
 
@@ -23,6 +21,23 @@
 #define KAD_CONST      0x2
 #define KAD_POOL       0x4
 #define KAD_SHARE_RNG  0x10 /* with this flag on, different time step shares the same RNG status after unroll */
+
+#define KAD_ALLOC      1
+#define KAD_FORWARD    2
+#define KAD_BACKWARD   3
+#define KAD_SYNC_DIM   4
+
+#define KANN_C_CEB      1   /* binary cross-entropy cost, used with sigmoid */
+#define KANN_C_CEM      2   /* multi-class cross-entropy cost, used with softmax */
+#define KANN_C_CEB_NEG  3   /* binary cross-enytopy-like cost, used with tanh */
+#define KANN_C_MSE      4   /* mean square error */
+
+#define KANN_F_IN       0x1   /* input */
+#define KANN_F_OUT      0x2   /* output */
+#define KANN_F_TRUTH    0x4   /* truth output */
+#define KANN_F_COST     0x8   /* final cost */
+
+#define kann_set_batch_size(ann, B) kad_sync_dim((ann)->n, (ann)->v, (B))
 
 #define kad_is_back(p)  ((p)->flag & KAD_VAR)
 #define kad_is_ext(p)   ((p)->n_child == 0)
@@ -55,6 +70,15 @@ typedef struct kad_node_t {
 	struct kad_node_t  *pre;    /* usually NULL; only used for RNN */
 } kad_node_t, *kad_node_p;
 
+typedef struct {
+	int n;            /* number of nodes in the computational graph */
+	kad_node_t **v;   /* list of nodes */
+	float *x, *g, *c; /* collated variable values, gradients and constant values */
+	void *mt;         /* auxiliary data for multi-threading; NULL if multi-threading disabled */
+} kann_t;
+
+typedef int (*kad_op_f)(kad_node_t*, int);
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -67,3 +91,9 @@ kad_node_t *kann_layer_dense2(int *offset, kad_node_p *par, kad_node_t *in, int 
 kad_node_t *kad_feed(int n_d, ...);
 kad_node_t *kad_add(kad_node_t *x, kad_node_t *y); /* f(x,y) = x + y (generalized element-wise addition; f[i*n+j]=x[i*n+j]+y[j], n=kad_len(y), 0<j<n, 0<i<kad_len(x)/n) */
 kad_node_t *kad_cmul(kad_node_t *x, kad_node_t *y);
+
+#ifdef __cplusplus
+}
+#endif
+
+#endif
