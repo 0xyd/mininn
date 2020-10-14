@@ -79,6 +79,7 @@ void kad_sgemm_simple(int trans_A, int trans_B, int M, int N, int K, const float
 
 static inline kad_node_t *kad_new_core(int n_d, int op, int n_child)
 {
+	printf("New core\n");
 	kad_node_t *s;
 	if (n_d >= KAD_MAX_DIM) {
 		return 0;
@@ -213,12 +214,14 @@ int kad_op_ce_bin(kad_node_t *p, int action)
 	kad_node_t *y1 = p->child[0]; /* test */
 	kad_node_t *y0 = p->child[1]; /* truth */
 	int i, n;
-
+	printf("kad_op_ce_bin is call \n");
 	n = kad_len(y0);
 	if (action == KAD_SYNC_DIM) {
+		printf("kad_op_ce_bin is call with KAD_SYNC_DIM \n");
 		if (n != kad_len(y1)) return -1;
 		p->n_d = 0;
 	} else if (action == KAD_FORWARD) {
+		printf("kad_op_ce_bin is call with KAD_FORWARD \n");
 		double cost = 0.0;
 		for (i = 0; i < n; ++i) {
 			if (y0->x[i] > 0.0f)
@@ -228,6 +231,7 @@ int kad_op_ce_bin(kad_node_t *p, int action)
 		}
 		p->x[0] = (float)(cost / n);
 	} else if (action == KAD_BACKWARD && kad_is_back(y1)) {
+		printf("kad_op_ce_bin is call with KAD_BACKWARD \n");
 		float t = p->g[0] / n;
 		for (i = 0; i < n; ++i) {
 			if (y0->x[i] > 0.0f)
@@ -456,21 +460,24 @@ kad_op_f kad_op_list[KAD_MAX_OP] = {
 static inline kad_node_t *kad_finalize_node(kad_node_t *s)  // a helper function 
 {
 	int i;
+	printf("in kad_finalize_node s->op: %d \n", s->op);
 	if (kad_op_list[s->op](s, KAD_SYNC_DIM) < 0) { /* check dimension */
 		if (s->ptr) free(s->ptr);
 		free(s->child); free(s);
 		return 0;
-	}
+	} 
 	for (i = 0; i < s->n_child; ++i)
 		if (kad_is_back(s->child[i]))
 			break;
 	if (i < s->n_child) s->flag |= KAD_VAR;
+	printf("in kad_finalize_node s->n_d: %d \n", s->n_d);
 	return s;
 }
 
 static inline kad_node_t *kad_op2_core(int op, kad_node_t *x, kad_node_t *y)
 {	
 	kad_node_t *s;
+	printf("in kad_op2_core, the op is : %d \n", op);
 	s = kad_new_core(0, op, 2);
 	s->child[0] = x, s->child[1] = y;
 
@@ -513,7 +520,6 @@ static kad_node_t *kad_pooling_general(int op, int n, kad_node_t **x)
 	s->flag |= KAD_POOL;
 	for (i = 0; i < n; ++i)
 		s->child[i] = x[i];
-	printf("try");
 	return kad_finalize_node(s);
 }
 
@@ -611,6 +617,7 @@ kad_node_t *kann_layer_cost(kad_node_t *t, int n_out, int cost_type)
 		cost = kad_ce_multi(t, truth);
 	}
 	t->ext_flag |= KANN_F_OUT, cost->ext_flag |= KANN_F_COST;
+
 	return cost;
 }
 
@@ -802,6 +809,8 @@ int kann_find(const kann_t *a, uint32_t ext_flag, int32_t ext_label)
 	for (i = k = 0; i < a->n; ++i)
 		if (chk_flg(a->v[i]->ext_flag, ext_flag) && chk_lbl(a->v[i]->ext_label, ext_label))
 			++k, r = i;
+	printf("r: %d \n", r);
+	printf("k: %d \n", k);
 	return k == 1? r : k == 0? -1 : -2;
 }
 
@@ -902,6 +911,7 @@ const float *kann_apply1(kann_t *a, float *x)
 {
 	int i_out;
 	i_out = kann_find(a, KANN_F_OUT, 0);
+	// printf("i_out: %d \n", i_out);
 	if (i_out < 0) return 0;
 	kann_set_batch_size(a, 1);
 	kann_feed_bind(a, KANN_F_IN, 0, &x);
