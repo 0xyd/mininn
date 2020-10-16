@@ -93,6 +93,7 @@ kad_node_t *kad_feed(int n_d, ...);
 kad_node_t *kad_add(kad_node_t *x, kad_node_t *y); /* f(x,y) = x + y (generalized element-wise addition; f[i*n+j]=x[i*n+j]+y[j], n=kad_len(y), 0<j<n, 0<i<kad_len(x)/n) */
 kad_node_t *kad_cmul(kad_node_t *x, kad_node_t *y);
 kad_node_t *kad_ce_bin(kad_node_t *x, kad_node_t *y);
+kad_node_t *kad_sigm(kad_node_t *x); 			   /* f(x) = 1/(1+exp(-x))               (element-wise sigmoid) */
 kann_t *kann_new(kad_node_t *cost, int n_rest, ...);
 const float *kad_eval_at(int n, kad_node_t **a, int from);
 const float *kann_apply1(kann_t *a, float *x);

@@ -809,8 +809,6 @@ int kann_find(const kann_t *a, uint32_t ext_flag, int32_t ext_label)
 	for (i = k = 0; i < a->n; ++i)
 		if (chk_flg(a->v[i]->ext_flag, ext_flag) && chk_lbl(a->v[i]->ext_label, ext_label))
 			++k, r = i;
-	printf("r: %d \n", r);
-	printf("k: %d \n", k);
 	return k == 1? r : k == 0? -1 : -2;
 }
 
@@ -879,7 +877,10 @@ kann_t *kann_new(kad_node_t *cost, int n_rest, ...)
 	kad_node_t **roots;
 	va_list ap;
 
-	if (cost->n_d != 0) return 0;
+	// Because we don't need cost function, 
+	// instead, we need activation function so that we can output
+	// the value.
+	// if (cost->n_d != 0) return 0;
 
 	va_start(ap, n_rest);
 	roots = (kad_node_t**)malloc((n_roots + 1) * sizeof(kad_node_t*));
@@ -911,7 +912,6 @@ const float *kann_apply1(kann_t *a, float *x)
 {
 	int i_out;
 	i_out = kann_find(a, KANN_F_OUT, 0);
-	// printf("i_out: %d \n", i_out);
 	if (i_out < 0) return 0;
 	kann_set_batch_size(a, 1);
 	kann_feed_bind(a, KANN_F_IN, 0, &x);

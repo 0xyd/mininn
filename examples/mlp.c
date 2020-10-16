@@ -54,16 +54,26 @@ int main(int argc, char *argv[]) {
 	printf("t->child[1]->x[10]: %f \n", t->child[1]->x[10]);
 
 	// Add the output layer
-	t = kann_layer_cost(t, 1, KANN_C_CEB);
-
-	// BUG!
+	printf("t->n_d: %d \n", t->n_d);
+	printf("============\n");
+	// Replace the cost layer with a dense and a sigmod activation
+	// since we only want to inference
+	t = kann_layer_dense(t, 1);
+	t = kad_sigm(t); t->ext_flag = KANN_F_OUT;
+	// t = kann_layer_cost(t, 1, KANN_C_CEB);
+	
+	printf("============\n");
+	printf("t->n_d: %d \n", t->n_d);
 	nn = kann_new(t, 0);
 
 	// 
-	// float *y;
-	// y = kann_apply1(nn, input);
-	// printf("y: %f \n", *y);
-	// printf("y: %f \n", y[0]);
+	float *y;
+	printf("t->x \n");
+	y = kann_apply1(nn, input);
+	printf("y: %f \n", *y);
+	
+
+	// 
 
 	return 0;
 }
