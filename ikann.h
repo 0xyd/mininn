@@ -94,6 +94,8 @@ kad_node_t *kad_add(kad_node_t *x, kad_node_t *y); /* f(x,y) = x + y (generalize
 kad_node_t *kad_cmul(kad_node_t *x, kad_node_t *y);
 kad_node_t *kad_ce_bin(kad_node_t *x, kad_node_t *y);
 kad_node_t *kad_sigm(kad_node_t *x); 			   /* f(x) = 1/(1+exp(-x))               (element-wise sigmoid) */
+kad_node_t *kad_tanh(kad_node_t *x);   /* f(x) = (1-exp(-2x)) / (1+exp(-2x)) (element-wise tanh) */
+kad_node_t *kad_relu(kad_node_t *x);   /* f(x) = max{0,x}                    (element-wise rectifier, aka ReLU) */
 kann_t *kann_new(kad_node_t *cost, int n_rest, ...);
 const float *kad_eval_at(int n, kad_node_t **a, int from);
 const float *kann_apply1(kann_t *a, float *x);

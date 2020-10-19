@@ -59,7 +59,9 @@ int main(int argc, char *argv[]) {
 	// Replace the cost layer with a dense and a sigmod activation
 	// since we only want to inference
 	t = kann_layer_dense(t, 1);
-	t = kad_sigm(t); t->ext_flag = KANN_F_OUT;
+	t = kad_tanh(t); t->ext_flag = KANN_F_OUT;
+	// t = kad_relu(t); t->ext_flag = KANN_F_OUT;
+	// t = kad_sigm(t); t->ext_flag = KANN_F_OUT;
 	// t = kann_layer_cost(t, 1, KANN_C_CEB);
 	
 	printf("============\n");
