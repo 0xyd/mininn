@@ -140,13 +140,6 @@ int kad_op_mul(kad_node_t *p, int action)
 		if (q[0]->x != 0 && q[1]->x != 0)
 			for (i = 0; i < n0; i += n1) /* TODO: optimize when n1==1 */
 				kad_vec_mul_sum(n1, p->x + i, q[0]->x + i, q[1]->x);
-	} else if (action == KAD_BACKWARD) {
-		if (kad_is_back(q[0]) && q[1]->x)
-			for (i = 0; i < n0; i += n1)
-				kad_vec_mul_sum(n1, q[0]->g + i, p->g + i, q[1]->x);
-		if (kad_is_back(q[1]) && q[0]->x)
-			for (i = 0; i < n0; i += n1)
-				kad_vec_mul_sum(n1, q[1]->g, p->g + i, q[0]->x + i);
 	}
 	return 0;
 }
@@ -365,13 +358,12 @@ kad_node_t *kann_new_leaf_array(int *offset, kad_node_p *par, uint8_t flag, floa
 	p->x = (float*)calloc(len, sizeof(float));
 	if (p->n_d <= 1) {
 		for (i = 0; i < len; ++i)
-			p->x[i] = 0.01;
+			p->x[i] = x0_01;
 	} else {
-		// double sdev_inv;
-		// sdev_inv = 1.0 / sqrt((double)len / p->d[0]);
-		for (i = 0; i < len; ++i)
+		float sdev_inv;
+		sdev_inv = 1.0 / sqrt((float)len / p->d[0]);
+		for (i = 0; i < len; ++i) 
 			p->x[i] = 0.01;
-			// p->x[i] = (float)(kad_drand_normal(0) * sdev_inv);
 	}
 	if (off >= 0) par[off] = p, ++(*offset);
 	return p;
@@ -539,7 +531,6 @@ int kad_size_const(int n, kad_node_t *const* v)
 			c += kad_len(v[i]);
 	return c;
 }
-
 
 /**********************************
  * Computate values and gradients *
