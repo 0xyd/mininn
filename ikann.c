@@ -6,9 +6,6 @@
 #include <math.h>
 #include "ikann.h"
 
-
-
-
 static inline void kad_copy_dim1(kad_node_t *dst, const kad_node_t *src) /* set the dimension/shape of dst to src */
 {
 	dst->n_d = src->n_d;
@@ -51,7 +48,7 @@ void kad_sgemm_simple(int trans_A, int trans_B, int M, int N, int K, const float
 	static const int x = 16;
 	int i, j, k;
 	if (!trans_A && trans_B) {
-		for (i = 0; i < M; i += x)
+		for (i = 0; i < M; i += x) {
 			for (j = 0; j < N; j += x) {
 				int ii, ie = M < i + x? M : i + x;
 				int jj, je = N < j + x? N : j + x;
@@ -62,6 +59,7 @@ void kad_sgemm_simple(int trans_A, int trans_B, int M, int N, int K, const float
 						cii[jj] += kad_sdot(K, aii, bjj);
 				}
 			}
+		}
 	} else if (!trans_A && !trans_B) {
 		for (i = 0; i < M; ++i)
 			for (k = 0; k < K; ++k)
@@ -79,7 +77,6 @@ void kad_sgemm_simple(int trans_A, int trans_B, int M, int N, int K, const float
 
 static inline kad_node_t *kad_new_core(int n_d, int op, int n_child)
 {
-	printf("New core\n");
 	kad_node_t *s;
 	if (n_d >= KAD_MAX_DIM) {
 		return 0;
@@ -118,14 +115,10 @@ int kad_op_add(kad_node_t *p, int action)
 	} else if (action == KAD_FORWARD) {
 		assert(n0 >= n1);
 		memcpy(p->x, q[0]->x, n0 * sizeof(float));
-		for (i = 0; i < n0; i += n1)
+		for (i = 0; i < n0; i += n1) 
 			kad_saxpy(n1, 1.0f, q[1]->x, p->x + i);
-	} else if (action == KAD_BACKWARD) {
-		if (kad_is_back(q[0])) kad_saxpy(n0, 1.0f, p->g, q[0]->g);
-		if (kad_is_back(q[1]))
-			for (i = 0; i < n0; i += n1)
-				kad_saxpy(n1, 1.0f, p->g + i, q[1]->g);
-	}
+
+	} 
 	return 0;
 }
 
@@ -174,162 +167,9 @@ int kad_op_cmul(kad_node_t *p, int action)
 		memset(p->x, 0, n_a_row * n_b_row * sizeof(float));
 		if (q[0]->x && q[1]->x)
 			kad_sgemm_simple(0, 1, n_a_row, n_b_row, n_col, q[0]->x, q[1]->x, p->x); /* Y = X * trans(W) */
-	} else if (action == KAD_BACKWARD) {
-		if (kad_is_back(q[0]) && q[1]->x)
-			kad_sgemm_simple(0, 0, n_a_row, n_col, n_b_row, p->g, q[1]->x, q[0]->g); /* G_x <- G_y * W */
-		if (kad_is_back(q[1]) && q[0]->x)
-			kad_sgemm_simple(1, 0, n_b_row, n_col, n_a_row, p->g, q[0]->x, q[1]->g); /* G_w <- trans(G_y) * X */
-	}
+	} 
 	return 0;
 }
-
-/********** Cost functions **********/
-
-int kad_op_mse(kad_node_t *p, int action)
-{
-	kad_node_t *y1 = p->child[0]; /* test */
-	kad_node_t *y0 = p->child[1]; /* truth */
-	int i, n;
-
-	n = kad_len(y0);
-	if (action == KAD_SYNC_DIM) {
-		if (n != kad_len(y1)) return -1;
-		p->n_d = 0;
-	} else if (action == KAD_FORWARD) {
-		double cost = 0.0;
-		for (i = 0; i < n; ++i)
-			cost += (y1->x[i] - y0->x[i]) * (y1->x[i] - y0->x[i]);
-		p->x[0] = (float)(cost / n);
-	} else if (action == KAD_BACKWARD && kad_is_back(y1)) {
-		float t = 2.0f * p->g[0] / n;
-		for (i = 0; i < n; ++i)
-			y1->g[i] += t * (y1->x[i] - y0->x[i]);
-	}
-	return 0;
-}
-
-int kad_op_ce_bin(kad_node_t *p, int action)
-{
-	static const float tiny = 1e-9f;
-	kad_node_t *y1 = p->child[0]; /* test */
-	kad_node_t *y0 = p->child[1]; /* truth */
-	int i, n;
-	printf("kad_op_ce_bin is call \n");
-	n = kad_len(y0);
-	if (action == KAD_SYNC_DIM) {
-		printf("kad_op_ce_bin is call with KAD_SYNC_DIM \n");
-		if (n != kad_len(y1)) return -1;
-		p->n_d = 0;
-	} else if (action == KAD_FORWARD) {
-		printf("kad_op_ce_bin is call with KAD_FORWARD \n");
-		double cost = 0.0;
-		for (i = 0; i < n; ++i) {
-			if (y0->x[i] > 0.0f)
-				cost += y0->x[i] * log(y0->x[i] / (y1->x[i] > tiny? y1->x[i] : tiny));
-			if (1.0f - y0->x[i] > 0.0f)
-				cost += (1.0f - y0->x[i]) * log((1.0f - y0->x[i]) / (1.0f - y1->x[i] > tiny? 1.0f - y1->x[i] : tiny));
-		}
-		p->x[0] = (float)(cost / n);
-	} else if (action == KAD_BACKWARD && kad_is_back(y1)) {
-		printf("kad_op_ce_bin is call with KAD_BACKWARD \n");
-		float t = p->g[0] / n;
-		for (i = 0; i < n; ++i) {
-			if (y0->x[i] > 0.0f)
-				y1->g[i] -= t * y0->x[i] / (y1->x[i] > tiny? y1->x[i] : tiny);
-			if (1.0f - y0->x[i] > 0.0f)
-				y1->g[i] += t * (1.0f - y0->x[i]) / (1.0f - y1->x[i] > tiny? 1.0f - y1->x[i] : tiny);
-		}
-	}
-	return 0;
-}
-
-int kad_op_ce_bin_neg(kad_node_t *p, int action)
-{
-	static const float tiny = 1e-9f;
-	kad_node_t *y1 = p->child[0]; /* test */
-	kad_node_t *y0 = p->child[1]; /* truth */
-	int i, n;
-
-	n = kad_len(y0);
-	if (action == KAD_SYNC_DIM) {
-		if (n != kad_len(y1)) return -1;
-		p->n_d = 0;
-	} else if (action == KAD_FORWARD) {
-		double cost = 0.0;
-		for (i = 0; i < n; ++i) {
-			if (1.0f + y0->x[i] > 0.0f)
-				cost += .5f * (1.0f + y0->x[i]) * log((1.0f + y0->x[i]) / (1.0f + y1->x[i] > tiny? 1.0f + y1->x[i] : tiny));
-			if (1.0f - y0->x[i] > 0.0f)
-				cost += .5f * (1.0f - y0->x[i]) * log((1.0f - y0->x[i]) / (1.0f - y1->x[i] > tiny? 1.0f - y1->x[i] : tiny));
-		}
-		p->x[0] = (float)(cost / n);
-	} else if (action == KAD_BACKWARD && kad_is_back(y1)) {
-		float t = p->g[0] / n;
-		for (i = 0; i < n; ++i) {
-			if (1.0f + y0->x[i] > 0.0f)
-				y1->g[i] -= .5f * t * (1.0f + y0->x[i]) / (1.0f + y1->x[i] > tiny? 1.0f + y1->x[i] : tiny);
-			if (1.0f - y0->x[i] > 0.0f)
-				y1->g[i] += .5f * t * (1.0f - y0->x[i]) / (1.0f - y1->x[i] > tiny? 1.0f - y1->x[i] : tiny);
-		}
-	}
-	return 0;
-}
-
-int kad_op_ce_multi(kad_node_t *p, int action)
-{
-	static const float tiny = 1e-9f;
-	kad_node_t *y1 = p->child[0]; /* test */
-	kad_node_t *y0 = p->child[1]; /* truth */
-	kad_node_t *c = 0;
-	int i, j, n1, d0;
-
-	n1 = y0->d[y0->n_d - 1];
-	d0 = kad_len(y0) / n1;
-	if (p->n_child == 3) {
-		c = p->child[2];
-		assert(c->n_d == 1 && c->d[0] == n1);
-	}
-	if (action == KAD_SYNC_DIM) {
-		if (kad_len(y0) != kad_len(y1) || y0->d[y0->n_d - 1] != y1->d[y1->n_d - 1]) return -1;
-		p->n_d = 0;
-	} else if (action == KAD_FORWARD) {
-		double cost = 0.0;
-		if (c == 0) {
-			for (j = 0; j < d0; ++j) {
-				float *x1 = &y1->x[j * n1], *x0 = &y0->x[j * n1];
-				for (i = 0; i < n1; ++i)
-					if (x0[i] > 0.0f)
-						cost += x0[i] * log(x0[i] / (x1[i] > tiny? x1[i] : tiny));
-			}
-		} else {
-			for (j = 0; j < d0; ++j) {
-				float *x1 = &y1->x[j * n1], *x0 = &y0->x[j * n1];
-				for (i = 0; i < n1; ++i)
-					if (x0[i] > 0.0f)
-						cost += c->x[i] * x0[i] * log(x0[i] / (x1[i] > tiny? x1[i] : tiny));
-			}
-		}
-		p->x[0] = (float)(cost / d0);
-	} else if (action == KAD_BACKWARD && kad_is_back(y1)) {
-		float t = p->g[0] / d0;
-		if (c == 0) {
-			for (j = 0; j < d0; ++j) {
-				float *g = &y1->g[j * n1], *x1 = &y1->x[j * n1], *x0 = &y0->x[j * n1];
-				for (i = 0; i < n1; ++i)
-					g[i] -= t * x0[i] / (x1[i] > tiny? x1[i] : tiny);
-			}
-		} else {
-			for (j = 0; j < d0; ++j) {
-				float *g = &y1->g[j * n1], *x1 = &y1->x[j * n1], *x0 = &y0->x[j * n1];
-				for (i = 0; i < n1; ++i)
-					g[i] -= t * c->x[i] * x0[i] / (x1[i] > tiny? x1[i] : tiny);
-			}
-		}
-	}
-	return 0;
-}
-
-/*******************************/
 
 /********** Activation functions **********/
 
@@ -343,10 +183,7 @@ int kad_op_sigm(kad_node_t *p, int action)
 	} else if (action == KAD_FORWARD) {
 		for (i = 0; i < n; ++i)
 			p->x[i] = 1.0f / (1.0f + expf(-q->x[i]));
-	} else if (action == KAD_BACKWARD && kad_is_back(q)) {
-		for (i = 0; i < n; ++i)
-			q->g[i] += p->g[i] * (p->x[i] * (1.0f - p->x[i]));
-	}
+	} 
 	return 0;
 }
 
@@ -366,10 +203,7 @@ int kad_op_tanh(kad_node_t *p, int action)
 				p->x[i] = (1.0f - y) / (1.0f + y);
 			}
 		}
-	} else if (action == KAD_BACKWARD && kad_is_back(q)) {
-		for (i = 0; i < n; ++i)
-			q->g[i] += p->g[i] * (1.0f - p->x[i] * p->x[i]);
-	}
+	} 
 	return 0;
 }
 
@@ -381,13 +215,9 @@ int kad_op_relu(kad_node_t *p, int action)
 	if (action == KAD_SYNC_DIM) {
 		kad_copy_dim1(p, q);
 	} else if (action == KAD_FORWARD) {
-		for (i = 0; i < n; ++i)
+		for (i = 0; i < n; ++i) 
 			p->x[i] = q->x[i] > 0.0f? q->x[i] : 0.0f;
-	} else if (action == KAD_BACKWARD && kad_is_back(q)) {
-		for (i = 0; i < n; ++i)
-			if (q->x[i] > 0.0f)
-				q->g[i] += p->g[i];
-	}
+	} 
 	return 0;
 }
 
@@ -400,10 +230,7 @@ int kad_op_sin(kad_node_t *p, int action)
 		kad_copy_dim1(p, q);
 	} else if (action == KAD_FORWARD) {
 		for (i = 0; i < n; ++i) p->x[i] = sinf(q->x[i]);
-	} else if (action == KAD_BACKWARD && kad_is_back(q)) {
-		for (i = 0; i < n; ++i)
-			q->g[i] += p->g[i] * cosf(q->x[i]);
-	}
+	} 
 	return 0;
 }
 
@@ -427,15 +254,7 @@ int kad_op_softmax(kad_node_t *p, int action)
 			}
 			for (i = 0, s = 1.0f / s; i < n1; ++i) y[i] *= s;
 		}
-	} else if (action == KAD_BACKWARD && kad_is_back(q)) {
-		for (j = 0; j < d0; ++j) {
-			float s, *g = &p->g[j * n1], *y = &p->x[j * n1], *h = &q->g[j * n1];
-			for (i = 0, s = 0.0f; i < n1; ++i)
-				s += g[i] * y[i];
-			for (i = 0; i < n1; ++i)
-				h[i] += y[i] * (g[i] - s);
-		}
-	}
+	} 
 	return 0;
 }
 
@@ -450,11 +269,6 @@ kad_op_f kad_op_list[KAD_MAX_OP] = {
 	kad_op_tanh,	   /* 5: */
 	kad_op_relu,	   /* 6: */
 	kad_op_softmax,    /* 7: */
-	kad_op_mse,		   /* 8: */
-	kad_op_ce_bin_neg, /* 9: */
-	kad_op_ce_multi,   /* 10: */
-	kad_op_ce_bin, 	   /* 11: */
-
 };
 
 static inline kad_node_t *kad_finalize_node(kad_node_t *s)  // a helper function 
@@ -505,10 +319,6 @@ KAD_FUNC_OP1(kad_softmax, 7)
 KAD_FUNC_OP2(kad_add, 1)
 KAD_FUNC_OP2(kad_mul, 2)
 KAD_FUNC_OP2(kad_cmul, 3)
-KAD_FUNC_OP2(kad_mse, 8)
-KAD_FUNC_OP2(kad_ce_bin_neg, 9)
-KAD_FUNC_OP2(kad_ce_multi, 10)
-KAD_FUNC_OP2(kad_ce_bin, 11)
 
 /********** Multi-node pooling **********/
 
@@ -594,31 +404,6 @@ kad_node_t *kann_layer_dense2(int *offset, kad_node_p *par, kad_node_t *in, int 
 	w = kann_new_leaf2(offset, par, KAD_VAR, 0.0f, 2, n1, n0);
 	b = kann_new_leaf2(offset, par, KAD_VAR, 0.0f, 1, n1);
 	return kad_add(kad_cmul(in, w), b);
-}
-
-kad_node_t *kann_layer_cost(kad_node_t *t, int n_out, int cost_type)
-{
-	kad_node_t *cost = 0, *truth = 0;
-	assert(cost_type == KANN_C_CEB || cost_type == KANN_C_CEM || cost_type == KANN_C_CEB_NEG || cost_type == KANN_C_MSE);
-	t = kann_layer_dense(t, n_out);
-	truth = kad_feed(2, 1, n_out), truth->ext_flag |= KANN_F_TRUTH;
-
-	// The activation function of the output layer.
-	if (cost_type == KANN_C_MSE) {
-		cost = kad_mse(t, truth);
-	} else if (cost_type == KANN_C_CEB) {
-		t = kad_sigm(t);
-		cost = kad_ce_bin(t, truth);
-	} else if (cost_type == KANN_C_CEB_NEG) {
-		t = kad_tanh(t);
-		cost = kad_ce_bin_neg(t, truth);
-	} else if (cost_type == KANN_C_CEM) {
-		t = kad_softmax(t);
-		cost = kad_ce_multi(t, truth);
-	}
-	t->ext_flag |= KANN_F_OUT, cost->ext_flag |= KANN_F_COST;
-
-	return cost;
 }
 
 /***********************
@@ -783,9 +568,12 @@ void kad_eval_marked(int n, kad_node_t **a)
 {
 	int i;
 	kad_propagate_marks(n, a);
-	for (i = 0; i < n; ++i)
-		if (a[i]->n_child && a[i]->tmp > 0)
+	for (i = 0; i < n; ++i) {
+		if (a[i]->n_child && a[i]->tmp > 0) {
 			kad_op_list[a[i]->op](a[i], KAD_FORWARD);
+			printf("aloha!\n");
+		}
+	}
 	for (i = 0; i < n; ++i) a[i]->tmp = 0;
 }
 
