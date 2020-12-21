@@ -98,7 +98,9 @@ static inline kad_node_t *kad_vleaf(uint8_t flag, float *x, float *g, int n_d, v
 	// Set up the size of the input 
 	for (i = 0; i < n_d; ++i)
 		p->d[i] = va_arg(ap, int32_t);
-	p->x = x, p->g = g, p->flag = flag;
+	// gradient is not important in inference
+	p->x = x, p->flag = flag;
+	// p->x = x, p->g = g, p->flag = flag;
 	return p;
 }
 
@@ -423,10 +425,11 @@ static void kad_allocate_internal(int n, kad_node_t **v)
 		kad_node_t *p = v[i];
 		if (p->n_child == 0) continue;
 		p->x = (float*)realloc(p->x, kad_len(p) * sizeof(float));
-		if (kad_is_back(p)) {
-			p->g = (float*)realloc(p->g, kad_len(p) * sizeof(float));
-			kad_op_list[p->op](p, KAD_ALLOC);
-		}
+		// gradient is no need for inference
+		// if (kad_is_back(p)) {
+		// 	p->g = (float*)realloc(p->g, kad_len(p) * sizeof(float));
+		// 	kad_op_list[p->op](p, KAD_ALLOC);
+		// }
 	}
 }
 
@@ -562,7 +565,6 @@ void kad_eval_marked(int n, kad_node_t **a)
 	for (i = 0; i < n; ++i) {
 		if (a[i]->n_child && a[i]->tmp > 0) {
 			kad_op_list[a[i]->op](a[i], KAD_FORWARD);
-			printf("aloha!\n");
 		}
 	}
 	for (i = 0; i < n; ++i) a[i]->tmp = 0;
@@ -605,15 +607,17 @@ int kann_feed_bind(kann_t *a, uint32_t ext_flag, int32_t ext_label, float **x)
  *** @@BASIC: fundamental KANN routines ***
  ******************************************/
 
-static void kad_ext_collate(int n, kad_node_t **a, float **_x, float **_g, float **_c)
+// Gradient is no need for inference
+// static void kad_ext_collate(int n, kad_node_t **a, float **_x, float **_g, float **_c)
+static void kad_ext_collate(int n, kad_node_t **a, float **_x, float **_c)
 {
 	int i, j, k, l, n_var;
 	float *x, *g, *c;
 	n_var = kad_size_var(n, a);
 	x = *_x = (float*)realloc(*_x, n_var * sizeof(float));
-	g = *_g = (float*)realloc(*_g, n_var * sizeof(float));
+	// g = *_g = (float*)realloc(*_g, n_var * sizeof(float));
 	c = *_c = (float*)realloc(*_c, kad_size_const(n, a) * sizeof(float));
-	memset(g, 0, n_var * sizeof(float));
+	// memset(g, 0, n_var * sizeof(float));
 	for (i = j = k = 0; i < n; ++i) {
 		kad_node_t *v = a[i];
 		if (kad_is_var(v)) {
@@ -621,7 +625,7 @@ static void kad_ext_collate(int n, kad_node_t **a, float **_x, float **_g, float
 			memcpy(&x[j], v->x, l * sizeof(float));
 			free(v->x);
 			v->x = &x[j];
-			v->g = &g[j];
+			// v->g = &g[j];
 			j += l;
 		} else if (kad_is_const(v)) {
 			l = kad_len(v);
@@ -640,7 +644,7 @@ static void kad_ext_sync(int n, kad_node_t **a, float *x, float *g, float *c)
 		kad_node_t *v = a[i];
 		if (kad_is_var(v)) {
 			v->x = &x[j];
-			v->g = &g[j];
+			// v->g = &g[j];
 			j += kad_len(v);
 		} else if (kad_is_const(v)) {
 			v->x = &c[k];
@@ -682,7 +686,10 @@ kann_t *kann_new(kad_node_t *cost, int n_rest, ...)
 		free(a->v);
 		a->v = kad_compile_array(&a->n, n_roots, roots);
 	}
-	kad_ext_collate(a->n, a->v, &a->x, &a->g, &a->c);
+
+	// Remove gradient pointer because it is not necessary
+	kad_ext_collate(a->n, a->v, &a->x, &a->c);
+	// kad_ext_collate(a->n, a->v, &a->x, &a->g, &a->c);
 	free(roots);
 	return a;
 }

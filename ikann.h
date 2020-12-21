@@ -63,9 +63,9 @@ typedef struct kad_node_t {
 	int32_t     ext_label;      /* labels for external uses (not modified by the kad_* APIs) */
 	uint32_t    ext_flag;       /* flags for external uses (not modified by the kad_* APIs) */
 	float      *x;              /* value; allocated for internal nodes */
-	float      *g;              /* gradient; allocated for internal nodes */
+	// float      *g;              /* gradient; allocated for internal nodes */
 	void       *ptr;            /* for special operators that need additional parameters (e.g. conv2d) */
-	void       *gtmp;           /* temporary data generated at the forward pass but used at the backward pass */
+	// void       *gtmp;           /* temporary data generated at the forward pass but used at the backward pass */
 	struct kad_node_t **child;  /* operands/child nodes */
 	struct kad_node_t  *pre;    /* usually NULL; only used for RNN */
 } kad_node_t, *kad_node_p;
@@ -88,11 +88,9 @@ kad_node_t *kann_new_leaf2(int *offset, kad_node_p *par, uint8_t flag, float x0_
 kad_node_t *kann_layer_input(int n1);
 kad_node_t *kann_layer_dense(kad_node_t *in, int n1);
 kad_node_t *kann_layer_dense2(int *offset, kad_node_p *par, kad_node_t *in, int n1);
-kad_node_t *kann_layer_cost(kad_node_t *t, int n_out, int cost_type);
 kad_node_t *kad_feed(int n_d, ...);
 kad_node_t *kad_add(kad_node_t *x, kad_node_t *y); /* f(x,y) = x + y (generalized element-wise addition; f[i*n+j]=x[i*n+j]+y[j], n=kad_len(y), 0<j<n, 0<i<kad_len(x)/n) */
 kad_node_t *kad_cmul(kad_node_t *x, kad_node_t *y);
-kad_node_t *kad_ce_bin(kad_node_t *x, kad_node_t *y);
 kad_node_t *kad_sigm(kad_node_t *x); 			   /* f(x) = 1/(1+exp(-x))               (element-wise sigmoid) */
 kad_node_t *kad_tanh(kad_node_t *x);   /* f(x) = (1-exp(-2x)) / (1+exp(-2x)) (element-wise tanh) */
 kad_node_t *kad_relu(kad_node_t *x);   /* f(x) = max{0,x}                    (element-wise rectifier, aka ReLU) */
