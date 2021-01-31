@@ -98,8 +98,9 @@ static inline kad_node_t *kad_vleaf(uint8_t flag, float *x, float *g, int n_d, v
 	// Set up the size of the input 
 	for (i = 0; i < n_d; ++i)
 		p->d[i] = va_arg(ap, int32_t);
-	// gradient is not important in inference
+	
 	p->x = x, p->flag = flag;
+	// gradient is not important in inference
 	// p->x = x, p->g = g, p->flag = flag;
 	return p;
 }
@@ -253,6 +254,194 @@ int kad_op_softmax(kad_node_t *p, int action)
 	return 0;
 }
 
+// Convolutional operation
+/********** 2D convolution **********/
+typedef struct {
+	int kernel_size, stride, pad[2];
+} conv_conf_t;
+
+static void conv_rot180(int d0, int d1, float *x) /* rotate/reverse a weight martix */
+{
+	int i, j;
+	for (i = 0; i < d0; ++i) {
+		float tmp, *xi = &x[i * d1];
+		for (j = 0; j < d1>>1; ++j)
+			tmp = xi[j], xi[j] = xi[d1-1-j], xi[d1-1-j] = tmp; 
+	}
+}
+
+static void conv2d_move_1to3(int d[4], const float *x, float *y) /* convert the NCHW shape to the NHWC shape */
+{
+	int i, j, k, l;
+	for (i = 0; i < d[0]; ++i)
+		for (j = 0; j < d[1]; ++j)
+			for (k = 0; k < d[2]; ++k) {
+				int ik = (i * d[2] + k) * d[3], ijk = ((i * d[1] + j) * d[2] + k) * d[3];
+				for (l = 0; l < d[3]; ++l)
+					y[(ik + l) * d[1] + j] = x[ijk + l];
+			}
+}
+
+static void conv2d_add_3to1(int d[4], const float *y, float *x) /* convert the NHWC shape back to NCHW and add to another NCHW-shaped array */
+{
+	int i, j, k, l;
+	for (i = 0; i < d[0]; ++i)
+		for (j = 0; j < d[1]; ++j)
+			for (k = 0; k < d[2]; ++k) {
+				int ik = (i * d[2] + k) * d[3], ijk = ((i * d[1] + j) * d[2] + k) * d[3];
+				for (l = 0; l < d[3]; ++l)
+					x[ijk + l] += y[(ik + l) * d[1] + j];
+			}
+}
+
+#define conv_out_size(in_size, aux) (((in_size) - (aux)->kernel_size + (aux)->pad[0] + (aux)->pad[1]) / (aux)->stride + 1)
+
+#define process_row_for(_xx, _ww, _yy, _wn, _pn, _stride, _pad, _t) do { \
+	int j, l; \
+	if (_stride > 1) { \
+		for (l = 0; l < _wn; ++l) { \
+			const float *xl = &_xx[l - _pad]; \
+			for (j = 0; j < _pn; ++j, xl += _stride) _t[j] = *xl; \
+			kad_saxpy(_pn, _ww[l], _t, _yy); \
+		} \
+	} else for (l = 0; l < _wn; ++l) kad_saxpy(_pn, _ww[l], &_xx[l - _pad], _yy); \
+} while (0)
+
+#define process_row_back_x(_xx, _ww, _yy, _wn, _pn, _stride, _pad, _t) do { \
+	int j, l; \
+	if (_stride > 1) { \
+		for (l = 0; l < _wn; ++l) { \
+			float *xl = &_xx[l - _pad]; \
+			memset(_t, 0, _pn * sizeof(float)); \
+			kad_saxpy(_pn, _ww[l], _yy, _t); \
+			for (j = 0; j < _pn; ++j, xl += _stride) *xl += _t[j]; \
+		} \
+	} else for (l = 0; l < _wn; ++l) kad_saxpy(_pn, _ww[l], _yy, &_xx[l - _pad]); \
+} while (0)
+
+#define process_row_back_w(_xx, _ww, _yy, _wn, _pn, _stride, _pad, _t) do { \
+	int j, l; \
+	if (_stride > 1) { \
+		for (l = 0; l < _wn; ++l) { \
+			const float *xl = &_xx[l - _pad]; \
+			for (j = 0; j < _pn; ++j, xl += _stride) _t[j] = *xl; \
+			_ww[l] += kad_sdot(_pn, _yy, _t); \
+		} \
+	} else for (l = 0; l < _wn; ++l) _ww[l] += kad_sdot(_pn, _yy, &_xx[l - _pad]); \
+} while (0)
+int kad_op_conv2d(kad_node_t *p, int action) /* in the number-channel-height-width (NCHW) shape */
+{
+#define conv2d_loop1(_x, _w, _y, _tmp, _row_func) do { /* for the NCHW shape */ \
+		int n, c1, c0, i, k, ii; \
+		for (n = 0; n < q->d[0]; ++n) /* mini-batch */ \
+			for (c1 = 0; c1 < w->d[0]; ++c1) /* output channel */ \
+				for (c0 = 0; c0 < w->d[1]; ++c0) /* input channel */ \
+					for (k = 0; k < w->d[2]; ++k) { /* kernel row */ \
+						float *_ww = &(_w)[((c1 * w->d[1] + c0) * w->d[2] + k) * w->d[3]]; \
+						for (i = 0, ii = k - aux[0].pad[0]; i < p->d[2] && ii >= 0 && ii < q->d[2]; ++i, ii += aux[0].stride) { /* output row */ \
+							float *_xx = &(_x)[((n * q->d[1] + c0) * q->d[2] + ii) * q->d[3]]; \
+							float *_yy = &(_y)[((n * p->d[1] + c1) * p->d[2] + i)  * p->d[3]]; \
+							if (x_padded) { \
+								memcpy(x_padded + aux[1].pad[0], _xx, q->d[3] * sizeof(float)); \
+								_xx = x_padded + aux[1].pad[0]; \
+							} \
+							_row_func(_xx, _ww, _yy, w->d[3], p->d[3], aux[1].stride, aux[1].pad[0], (_tmp)); \
+						} /* ~i */ \
+					} /* ~k, c0, c1, n */ \
+	} while (0)
+
+#define conv2d_loop2(_x, _w, _y, _code) do { /* for the NHWC shape */ \
+		int n, c1, i, j, k, ii, j_skip = aux[1].stride * q->d[1], m = w->d[3] * w->d[1]; \
+		for (n = 0; n < q->d[0]; ++n) /* mini-batch */ \
+			for (c1 = 0; c1 < w->d[0]; ++c1) /* output channel */ \
+				for (k = 0; k < w->d[2]; ++k) { /* kernel row */ \
+					float *_ww = &(_w)[(c1 * w->d[2] + k) * m]; \
+					for (i = 0, ii = k - aux[0].pad[0]; i < p->d[2] && ii >= 0 && ii < q->d[2]; ++i, ii += aux[0].stride) { /* output and input row */ \
+						float *_xx = &(_x)[(n * q->d[2] + ii) * q->d[3] * q->d[1]]; \
+						float *_yy = &(_y)[((n * p->d[1] + c1) * p->d[2] + i) * p->d[3]]; \
+						if (x_padded) { \
+							memcpy(x_padded + aux[1].pad[0] * q->d[1], _xx, q->d[3] * q->d[1] * sizeof(float)); \
+							_xx = x_padded; \
+						} \
+						for (j = 0; j < p->d[3]; ++j, _xx += j_skip, ++_yy) _code; /* output and input column */ \
+					} /* ~i */ \
+				} /* ~k, c1, n */ \
+	} while (0)
+
+	conv_conf_t *aux = (conv_conf_t*)p->ptr;
+	kad_node_t *q = p->child[0], *w = p->child[1];
+	float *t = 0, *q1 = 0, *w1 = 0, *x_padded = 0;
+	int algo_switch = 0;
+
+	if (action == KAD_FORWARD) { /* allocate working space */
+		if (w->d[3] * w->d[1] < 16) {
+			t = (float*)malloc(p->d[3] * sizeof(float));
+			x_padded = aux[1].pad[0] + aux[1].pad[1] > 0? (float*)calloc(q->d[3] + aux[1].pad[0] + aux[1].pad[1], sizeof(float)) : 0;
+		} else {
+			q1 = (float*)malloc(kad_len(q) * sizeof(float));
+			w1 = (float*)malloc(kad_len(w) * sizeof(float));
+			x_padded = aux[1].pad[0] + aux[1].pad[1] > 0? (float*)calloc((q->d[3] + aux[1].pad[0] + aux[1].pad[1]) * q->d[1], sizeof(float)) : 0;
+			algo_switch = 1;
+		}
+	}
+	if (action == KAD_SYNC_DIM) {
+		if (q->n_d != 4 || w->n_d != 4) return -1;
+		if (q->d[1] != w->d[1]) return -1; /* unmatched input channels */
+		p->n_d = 4;
+		p->d[0] = q->d[0], p->d[1] = w->d[0], p->d[2] = conv_out_size(q->d[2], &aux[0]), p->d[3] = conv_out_size(q->d[3], &aux[1]);
+	} else if (action == KAD_FORWARD) {
+		conv_rot180(w->d[0] * w->d[1], w->d[2] * w->d[3], w->x);
+		memset(p->x, 0, kad_len(p) * sizeof(float));
+		if (!algo_switch) { /* this is the first algorithm */
+			conv2d_loop1(q->x, w->x, p->x, t, process_row_for);
+		} else { /* this is the second algorithm */
+			conv2d_move_1to3(q->d, q->x, q1);
+			conv2d_move_1to3(w->d, w->x, w1);
+			conv2d_loop2(q1, w1, p->x, (*_yy += kad_sdot(m, _ww, _xx)));
+		}
+		conv_rot180(w->d[0] * w->d[1], w->d[2] * w->d[3], w->x);
+	}
+	free(t); free(q1); free(w1); free(x_padded);
+	return 0;
+}
+
+int kad_op_max2d(kad_node_t *p, int action)
+{
+	conv_conf_t *aux = (conv_conf_t*)p->ptr;
+	kad_node_t *q = p->child[0];
+	if (action == KAD_SYNC_DIM) {
+		if (q->n_d != 4) return -1;
+		p->n_d = 4;
+		p->d[0] = q->d[0], p->d[1] = q->d[1], p->d[2] = conv_out_size(q->d[2], &aux[0]), p->d[3] = conv_out_size(q->d[3], &aux[1]);
+	} else if (action == KAD_ALLOC) {
+		// p->gtmp = realloc(p->gtmp, kad_len(p) * sizeof(int));
+	} else if (action == KAD_FORWARD) {
+		int rest = 1, len, t, i;
+		// int *f = (int*)p->gtmp;
+		len = kad_len(p);
+		for (i = 0; i < len; ++i) p->x[i] = -FLT_MAX;
+		for (i = 0; i < p->n_d - 2; ++i) rest *= p->d[i];
+		for (t = 0; t < rest; ++t) {
+			int i, j, k, l, p_row = p->d[p->n_d - 2], p_col = p->d[p->n_d - 1];
+			for (i = 0; i < p_row; ++i) {
+				int u = (t * p_row + i) * p_col;
+				for (k = 0; k < aux[0].kernel_size; ++k) {
+					int v, v0, v_end, ii = i * aux[0].stride + k - aux[0].pad[0];
+					if (ii < 0 || ii >= q->d[p->n_d - 2]) continue;
+					v0 = (t * q->d[p->n_d - 2] + ii) * q->d[p->n_d - 1];
+					v_end = v0 + q->d[p->n_d - 1];
+					for (l = 0; l < aux[1].kernel_size; ++l)
+						for (j = 0, v = v0 + (l > aux[1].pad[0]? l - aux[1].pad[0] : 0); j < p_col && v < v_end; ++j, v += aux[1].stride)
+							if (p->x[u + j] < q->x[v])
+								p->x[u + j] = q->x[v];
+								// p->x[u + j] = q->x[v], f[u + j] = v;
+				} /* ~k */
+			} /* ~i */
+		}
+	} 
+	return 0;
+}
+
 /*******************************/
 
 kad_op_f kad_op_list[KAD_MAX_OP] = {
@@ -264,6 +453,8 @@ kad_op_f kad_op_list[KAD_MAX_OP] = {
 	kad_op_tanh,	   /* 5: */
 	kad_op_relu,	   /* 6: */
 	kad_op_softmax,    /* 7: */
+	kad_op_conv2d, 	   /* 8: 2D Concoluional */
+	kad_op_max2d,      /* 9: 2D Maxpooling */
 };
 
 static inline kad_node_t *kad_finalize_node(kad_node_t *s)  // a helper function 
@@ -398,6 +589,65 @@ kad_node_t *kann_layer_dense2(int *offset, kad_node_p *par, kad_node_t *in, int 
 	w = kann_new_leaf2(offset, par, KAD_VAR, 0.0f, 2, n1, n0);
 	b = kann_new_leaf2(offset, par, KAD_VAR, 0.0f, 1, n1);
 	return kad_add(kad_cmul(in, w), b);
+}
+
+/********** Convolution **********/
+
+/* compute output dimension and padding sizes on both sides */
+static inline int conv_find_par(int in_size, int kernel_size, int stride, int pad0, int *new_pad0, int *new_pad1)
+{
+	int out_size, pad_both;
+	/* key equation: out_size = (in_size - kernel_size + pad_both) / stride + 1 */
+	if (pad0 == KAD_PAD_SAME && stride == 1) out_size = in_size;
+	else out_size = (in_size - kernel_size + (pad0 > 0? pad0 : 0) + stride - 1) / stride + 1;
+	pad_both = (out_size - 1) * stride + kernel_size - in_size;
+	*new_pad0 = pad_both / 2;
+	*new_pad1 = pad_both - *new_pad0;
+	return out_size;
+}
+
+
+
+static inline conv_conf_t *conv2d_gen_aux(int in_row, int in_col, int kernel_r, int kernel_c, int stride_r, int stride_c, int top_pad, int left_pad)
+{
+	conv_conf_t *cnn;
+	cnn = (conv_conf_t*)calloc(2, sizeof(conv_conf_t));
+	cnn[0].kernel_size = kernel_r, cnn[0].stride = stride_r;
+	cnn[1].kernel_size = kernel_c, cnn[1].stride = stride_c;
+	conv_find_par(in_row, kernel_r, stride_r, top_pad,  &cnn[0].pad[0], &cnn[0].pad[1]);
+	conv_find_par(in_col, kernel_c, stride_c, left_pad, &cnn[1].pad[0], &cnn[1].pad[1]);
+	return cnn;
+}
+
+kad_node_t *kad_conv2d(kad_node_t *x, kad_node_t *w, int stride_r, int stride_c, int top_pad, int left_pad)
+{
+	kad_node_t *s;
+	if (x->n_d != 4 || w->n_d != 4) return 0;
+	s = kad_new_core(0, 8, 2);
+	s->child[0] = x, s->child[1] = w;
+	s->ptr = conv2d_gen_aux(x->d[2], x->d[3], w->d[2], w->d[3], stride_r, stride_c, top_pad, left_pad);
+	s->ptr_size = sizeof(conv_conf_t) * 2;
+	return kad_finalize_node(s);
+}
+
+kad_node_t *kad_max2d(kad_node_t *x, int kernel_r, int kernel_c, int stride_r, int stride_c, int top_pad, int left_pad)
+{
+	kad_node_t *s;
+	if (x->n_d != 4) return 0;
+	s = kad_new_core(0, 9, 1);
+	s->child[0] = x;
+	s->ptr = conv2d_gen_aux(x->d[2], x->d[3], kernel_r, kernel_c, stride_r, stride_c, top_pad, left_pad);
+	s->ptr_size = sizeof(conv_conf_t) * 2;
+	return kad_finalize_node(s);
+}
+
+kad_node_t *kann_new_weight_conv2d(int n_out, int n_in, int k_row, int k_col) { return kann_new_leaf(KAD_VAR, 0.0f, 4, n_out, n_in, k_row, k_col); }
+
+kad_node_t *kann_layer_conv2d(kad_node_t *in, int n_flt, int k_rows, int k_cols, int stride_r, int stride_c, int pad_r, int pad_c)
+{
+	kad_node_t *w;
+	w = kann_new_weight_conv2d(n_flt, in->d[1], k_rows, k_cols);
+	return kad_conv2d(in, w, stride_r, stride_c, pad_r, pad_c);
 }
 
 /***********************
