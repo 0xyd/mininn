@@ -60,8 +60,10 @@ typedef struct kad_node_t {
 	int32_t     tmp;            /* temporary field; MUST BE zero before calling kad_compile() */
 	int32_t     ptr_size;       /* size of ptr below */
 	int32_t     d[KAD_MAX_DIM]; /* dimensions */
-	int32_t     ext_label;      /* labels for external uses (not modified by the kad_* APIs) */
-	uint32_t    ext_flag;       /* flags for external uses (not modified by the kad_* APIs) */
+	int8_t      ext_label;		/* labels for external uses (not modified by the kad_* APIs) */
+	uint8_t		ext_flag;		/* flags for external uses (not modified by the kad_* APIs) */
+	// int32_t     ext_label;      /* labels for external uses (not modified by the kad_* APIs) */
+	// uint32_t    ext_flag;       /* flags for external uses (not modified by the kad_* APIs) */
 	float      *x;              /* value; allocated for internal nodes */
 	// float      *g;              /* gradient; allocated for internal nodes */
 	void       *ptr;            /* for special operators that need additional parameters (e.g. conv2d) */
@@ -73,7 +75,8 @@ typedef struct kad_node_t {
 typedef struct {
 	int n;            /* number of nodes in the computational graph */
 	kad_node_t **v;   /* list of nodes */
-	float *x, *g, *c; /* collated variable values, gradients and constant values */
+	float *x, *c; /* collated variable values, gradients and constant values */
+	// float *x, *g, *c; /* collated variable values, gradients and constant values */
 	void *mt;         /* auxiliary data for multi-threading; NULL if multi-threading disabled */
 } kann_t;
 
