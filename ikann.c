@@ -460,7 +460,6 @@ kad_op_f kad_op_list[KAD_MAX_OP] = {
 static inline kad_node_t *kad_finalize_node(kad_node_t *s)  // a helper function 
 {
 	int i;
-	printf("in kad_finalize_node s->op: %d \n", s->op);
 	if (kad_op_list[s->op](s, KAD_SYNC_DIM) < 0) { /* check dimension */
 		if (s->ptr) free(s->ptr);
 		free(s->child); free(s);
@@ -470,14 +469,12 @@ static inline kad_node_t *kad_finalize_node(kad_node_t *s)  // a helper function
 		if (kad_is_back(s->child[i]))
 			break;
 	if (i < s->n_child) s->flag |= KAD_VAR;
-	printf("in kad_finalize_node s->n_d: %d \n", s->n_d);
 	return s;
 }
 
 static inline kad_node_t *kad_op2_core(int op, kad_node_t *x, kad_node_t *y)
 {	
 	kad_node_t *s;
-	printf("in kad_op2_core, the op is : %d \n", op);
 	s = kad_new_core(0, op, 2);
 	s->child[0] = x, s->child[1] = y;
 
