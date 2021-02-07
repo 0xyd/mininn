@@ -59,7 +59,90 @@ class BackpropGraph():
 class iKannForwardGraph():
 
 	def __init__(self):
-		pass
+		'''
+		iKannForwardGraph is a graph based on ikann format
+
+		'''
+		self.g = {}
+		self.layerIdx = 0
+		self.visitedOperation = set()
 
 	def parse(self, backpropGraph):
+		'''
+		parse backpropgation graph of pytorch model. 
+
+		backpropGraph:
+		backpropGraph of pytorch model
+		'''
+		startNodes = []
+		for nid in backpropGraph.keys():
+			if 'output' in backpropGraph[nid]:
+				startNodes.append(nid)
+
+		for nid in startNodes:
+			self._parse(nid, backpropGraph)
+
+
+	def _parse(self, nodeId, graph):
+		'''
+		'''
+		if nodeId not in self.visitedOperation:
+
+			if 'ReluBackward' in graph[nodeId]['name']:
+				self._build_relu_block(nodeId, graph)
+
+			elif 'AddmmBackward' in graph[nodeId]['name']:
+				self._build_dense_block(nodeId, graph)
+
+			if self.layerIdx > 0:
+				self.g[self.layerIdx]['next'] = self.layerIdx-1
+
+			self.layerIdx += 1
+			self.visitedOperation.add(nodeId)
+
+			for c in graph[nodeId]['children']:
+				self._parse(c, graph)
+
+
+	def _build_dense_block(self, nodeId, graph):
+		'''
+		Build dense block. 
+
+
+		'''
+		self.g[self.layerIdx] = {'name': 'dense'}
+
+		children = graph[nodeId]['children']
+		for c in children:
+			if graph[c]['name'] == 'AccumulateGrad':
+				self.g[self.layerIdx]['bias'] = graph[c]
+				self.visitedOperation.add(c)
+			# The parent of 'TBackward' is weight
+			elif 'TBackward' in graph[c]['name']:
+				self.visitedOperation.add(c)
+				c = graph[c]['children'][0]
+				self.g[self.layerIdx]['weights'] = graph[c]
+			else:
+				continue
+
+	def _build_relu_block(self, nodeId, graph):
+		'''
+		Build relu block in graph
+
+		node:
+		An operation in a backpropagation graph
+		'''
+
+		self.g[self.layerIdx] = {'name': 'relu'}
+		if 'output' in graph[nodeId]:
+			self.g[self.layerIdx]['output'] = True
+
+	def _build_sigm_block(self):
 		pass
+
+	def _build_softmax_block(self):
+		pass
+
+
+
+
