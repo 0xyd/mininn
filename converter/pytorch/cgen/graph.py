@@ -22,6 +22,7 @@ class BackpropGraph():
 		var:
 		output of a pytorch model
 		'''
+
 		self.outputNodes = (var.grad_fn,) \
 			if not isinstance(var, tuple) \
 				else tuple(v.grad_fn for v in var)
@@ -30,32 +31,45 @@ class BackpropGraph():
 	def _parse(self, var):
 		'''
 		Parse and generate the graph
-
+		
 		var:
 		output of a pytorch model
 		'''
+
 		vId = id(var)
 
-		if vId not in self.g:
+		if vId in self.g:
+			return
+		else:
 
-			self.g[vId] = {
-				'name': str(type(var).__name__)}
+			self.g[vId] = { 'name': str(type(var).__name__) }
+			print(f'-'*10)
+			print(f"id: {vId}; name: {self.g[vId]['name']}")
 
 			if hasattr(var, 'variable'):
 				vv = var.variable
 				self.g[vId]['weights'] = vv.data
 				self.g[vId]['size'] = vv.size()
+
 			elif var in self.outputNodes:
 				self.g[vId]['output'] = True
+			else:
+				pass
 
+			print('children:')
 			if hasattr(var, 'next_functions'):
 				self.g[vId]['children'] = []
+				tmp = []
 				for u in var.next_functions:
 					if u[0] is not None:
-						self._parse(u[0])
-						self.g[vId]['children'].append(id(u[0]))
+						tmp.append(u[0])
+						print(f'id: {id(u[0])} name : {str(type(var).__name__)}')
 
+				for t in tmp:
+					self._parse(t)
+					self.g[vId]['children'].append(id(t))
 
+				
 class iKannForwardGraph():
 
 	def __init__(self):
@@ -85,6 +99,13 @@ class iKannForwardGraph():
 
 	def _parse(self, nodeId, graph):
 		'''
+		The implementation details of recursive parsing.
+
+		nodeId:
+		Id of operation node.
+
+		graph:
+		backprop graph of pytorch model
 		'''
 		if nodeId not in self.visitedOperation:
 
@@ -108,29 +129,52 @@ class iKannForwardGraph():
 		'''
 		Build dense block. 
 
+		nodeId:
+		Id of operation node.
 
+		graph:
+		backprop graph of pytorch model
 		'''
 		self.g[self.layerIdx] = {'name': 'dense'}
 
 		children = graph[nodeId]['children']
 		for c in children:
 			if graph[c]['name'] == 'AccumulateGrad':
-				self.g[self.layerIdx]['bias'] = graph[c]
+				self.g[self.layerIdx]['bias'] = {
+					'value': graph[c]['weights'],
+					'size': graph[c]['size']
+				}
 				self.visitedOperation.add(c)
-			# The parent of 'TBackward' is weight
+			# The children of 'TBackward' is weight
 			elif 'TBackward' in graph[c]['name']:
 				self.visitedOperation.add(c)
+				print("start :")
+				print(graph[c])
+				# print(f"TBackward: {c}")
 				c = graph[c]['children'][0]
-				self.g[self.layerIdx]['weights'] = graph[c]
+				print(f"TBackward's child : {c}")
+				# print('check out here!!!')
+				# print(graph[c])
+
+				for c in graph[c]['children']:
+					print(graph[c])
+					print('='*10)
+				self.g[self.layerIdx]['weights'] = {
+					'value': graph[c]['weights'],
+					'size': graph[c]['size']
+				}
 			else:
 				continue
 
 	def _build_relu_block(self, nodeId, graph):
 		'''
-		Build relu block in graph
+		Build relu block in graph.
 
-		node:
-		An operation in a backpropagation graph
+		nodeId:
+		Id of operation node.
+
+		graph:
+		backprop graph of pytorch model
 		'''
 
 		self.g[self.layerIdx] = {'name': 'relu'}
