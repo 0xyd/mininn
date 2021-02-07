@@ -63,7 +63,7 @@ class BackpropGraph():
 				for u in var.next_functions:
 					if u[0] is not None:
 						tmp.append(u[0])
-						print(f'id: {id(u[0])} name : {str(type(var).__name__)}')
+						print(f'id: {id(u[0])} name : {str(type(u[0]).__name__)}')
 
 				for t in tmp:
 					self._parse(t)
