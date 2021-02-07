@@ -334,7 +334,7 @@ int kad_op_conv2d(kad_node_t *p, int action) /* in the number-channel-height-wid
 #define conv2d_loop1(_x, _w, _y, _tmp, _row_func) do { /* for the NCHW shape */ \
 		int n, c1, c0, i, k, ii; \
 		for (n = 0; n < q->d[0]; ++n) /* mini-batch */ \
-			for (c1 = 0; c1 < w->d[0]; ++c1) /* output channel */ \
+			for (c1 = 0; c1 < w->d[0]; ++c1) {/* output channel */ \
 				for (c0 = 0; c0 < w->d[1]; ++c0) /* input channel */ \
 					for (k = 0; k < w->d[2]; ++k) { /* kernel row */ \
 						float *_ww = &(_w)[((c1 * w->d[1] + c0) * w->d[2] + k) * w->d[3]]; \
@@ -348,6 +348,7 @@ int kad_op_conv2d(kad_node_t *p, int action) /* in the number-channel-height-wid
 							_row_func(_xx, _ww, _yy, w->d[3], p->d[3], aux[1].stride, aux[1].pad[0], (_tmp)); \
 						} /* ~i */ \
 					} /* ~k, c0, c1, n */ \
+		} \
 	} while (0)
 
 #define conv2d_loop2(_x, _w, _y, _code) do { /* for the NHWC shape */ \
@@ -369,7 +370,7 @@ int kad_op_conv2d(kad_node_t *p, int action) /* in the number-channel-height-wid
 	} while (0)
 
 	conv_conf_t *aux = (conv_conf_t*)p->ptr;
-	kad_node_t *q = p->child[0], *w = p->child[1];
+	kad_node_t *q = p->child[0], *w = p->child[1]; /*q: input*/
 	float *t = 0, *q1 = 0, *w1 = 0, *x_padded = 0;
 	int algo_switch = 0;
 
@@ -543,6 +544,7 @@ kad_node_t *kann_new_leaf_array(int *offset, kad_node_p *par, uint8_t flag, floa
 	if (off >= 0 && par[off]) return par[(*offset)++];
 	p = (kad_node_t*)calloc(1, sizeof(kad_node_t));
 	p->n_d = n_d, p->flag = flag;
+	// printf("p->n_d %d\n", p->n_d);
 	memcpy(p->d, d, n_d * sizeof(int32_t));
 	len = kad_len(p);
 	p->x = (float*)calloc(len, sizeof(float));
@@ -566,7 +568,6 @@ kad_node_t *kann_new_leaf(uint8_t flag, float x0_01, int n_d, ...)
 	va_start(ap, n_d); for (i = 0; i < n_d; ++i) d[i] = va_arg(ap, int); va_end(ap);
 	return kann_new_leaf_array(0, 0, flag, x0_01, n_d, d);
 }
-
 
 kad_node_t *kann_new_leaf2(int *offset, kad_node_p *par, uint8_t flag, float x0_01, int n_d, ...)
 {
@@ -603,8 +604,6 @@ static inline int conv_find_par(int in_size, int kernel_size, int stride, int pa
 	return out_size;
 }
 
-
-
 static inline conv_conf_t *conv2d_gen_aux(int in_row, int in_col, int kernel_r, int kernel_c, int stride_r, int stride_c, int top_pad, int left_pad)
 {
 	conv_conf_t *cnn;
@@ -618,6 +617,7 @@ static inline conv_conf_t *conv2d_gen_aux(int in_row, int in_col, int kernel_r, 
 
 kad_node_t *kad_conv2d(kad_node_t *x, kad_node_t *w, int stride_r, int stride_c, int top_pad, int left_pad)
 {
+	// printf("In kad_conv2d\n");
 	kad_node_t *s;
 	if (x->n_d != 4 || w->n_d != 4) return 0;
 	s = kad_new_core(0, 8, 2);
@@ -642,9 +642,16 @@ kad_node_t *kann_new_weight_conv2d(int n_out, int n_in, int k_row, int k_col) { 
 
 kad_node_t *kann_layer_conv2d(kad_node_t *in, int n_flt, int k_rows, int k_cols, int stride_r, int stride_c, int pad_r, int pad_c)
 {
-	kad_node_t *w;
+	/*
+	n_flt: number of filters (a.k.a number of output channels)
+	*/
+	kad_node_t *w, *b;
 	w = kann_new_weight_conv2d(n_flt, in->d[1], k_rows, k_cols);
-	return kad_conv2d(in, w, stride_r, stride_c, pad_r, pad_c);
+
+	// Add bias
+	b = kann_new_leaf(KAD_VAR, 0.0f, 1, n_flt);
+
+	return kad_add(kad_conv2d(in, w, stride_r, stride_c, pad_r, pad_c), b);
 }
 
 /***********************
