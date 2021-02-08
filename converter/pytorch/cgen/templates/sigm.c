@@ -1,0 +1,1 @@
+t = kad_sigm(t);
