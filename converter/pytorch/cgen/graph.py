@@ -88,6 +88,8 @@ class iKannForwardGraph():
 	def parse(self, backpropGraph):
 		'''
 		parse backpropgation graph of pytorch model. 
+		The parse algorithm takes idea from torchviz package:
+		https://github.com/szagoruyko/pytorchviz/blob/master/torchviz/dot.py
 
 		backpropGraph:
 		backpropGraph of pytorch model
