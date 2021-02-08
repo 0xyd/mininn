@@ -138,23 +138,21 @@ class iKannForwardGraph():
 		self.g[self.layerIdx] = {'name': 'dense'}
 
 		children = graph[nodeId]['children']
+		
 		for c in children:
+
 			if graph[c]['name'] == 'AccumulateGrad':
 				self.g[self.layerIdx]['bias'] = {
 					'value': graph[c]['weights'],
 					'size': graph[c]['size']
 				}
 				self.visitedOperation.add(c)
+
 			# The children of 'TBackward' is weight
 			elif 'TBackward' in graph[c]['name']:
+
 				self.visitedOperation.add(c)
-				print("start :")
-				print(graph[c])
-				# print(f"TBackward: {c}")
 				c = graph[c]['children'][0]
-				print(f"TBackward's child : {c}")
-				# print('check out here!!!')
-				# print(graph[c])
 
 				for c in graph[c]['children']:
 					print(graph[c])
