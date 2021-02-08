@@ -14,6 +14,7 @@ class BackpropGraph():
 			id(v): k for k, v in 
 				dict(
 					model.named_parameters()).items()}
+		self.seen = set()
 
 	def parse(self, var):
 		'''
@@ -38,7 +39,8 @@ class BackpropGraph():
 
 		vId = id(var)
 
-		if vId in self.g:
+		# if vId in self.g:
+		if var in self.seen:
 			return
 		else:
 
@@ -55,6 +57,8 @@ class BackpropGraph():
 				self.g[vId]['output'] = True
 			else:
 				pass
+
+			self.seen.add(var)
 
 			print('children:')
 			if hasattr(var, 'next_functions'):
@@ -138,7 +142,7 @@ class iKannForwardGraph():
 		self.g[self.layerIdx] = {'name': 'dense'}
 
 		children = graph[nodeId]['children']
-		
+
 		for c in children:
 
 			if graph[c]['name'] == 'AccumulateGrad':
