@@ -123,6 +123,9 @@ class iKannForwardGraph():
 			elif 'SigmoidBackward' in graph[nodeId]['name']:
 				self._build_sigm_block(nodeId, graph)
 
+			elif 'TanhBackward' in graph[nodeId]['name']:
+				self._build_tanh_block(nodeId, graph)
+
 			if self.layerIdx > 0:
 				self.g[self.layerIdx]['next'] = self.layerIdx-1
 
@@ -198,6 +201,20 @@ class iKannForwardGraph():
 		backprop graph of pytorch model
 		'''
 		self.g[self.layerIdx] = {'name': 'sigm'}
+		if 'output' in graph[nodeId]:
+			self.g[self.layerIdx]['output'] = True
+
+	def _build_tanh_block(self, nodeId, graph):
+		'''
+		Build sigm block in graph
+
+		nodeId:
+		Id of operation node.
+
+		graph:
+		backprop graph of pytorch model
+		'''
+		self.g[self.layerIdx] = {'name': 'tanh'}
 		if 'output' in graph[nodeId]:
 			self.g[self.layerIdx]['output'] = True
 

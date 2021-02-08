@@ -39,6 +39,9 @@ class CSnippetGenerator():
 
 			elif name == 'sigm':
 				codeBlock = self._build_sigm()
+
+			elif name == 'tanh':
+				codeBlock = self._build_tanh()				
 				
 			else:
 				raise NotImplementedError
@@ -103,7 +106,8 @@ class CSnippetGenerator():
 	def _build_tanh(self):
 		'''
 		'''
-		pass
+		template = self.env.get_template('tanh.c')
+		return template.render()
 
 	def _build_softmax(self):
 		'''
