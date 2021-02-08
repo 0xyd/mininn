@@ -13,8 +13,9 @@ class CSnippetGenerator():
 		self.fileLoader = FileSystemLoader(templatePath)
 		self.env = Environment(loader=self.fileLoader)
 		self.base = self.env.get_template('base.c')
+		self.header = self.env.get_template('model.h')
 
-	def build_code(self, kannGraph, inputShape, outputPath):
+	def build_code(self, kannGraph, inputShape, outputPath='.'):
 		'''
 		kannGraph: <iKannForwardGraph>
 
@@ -22,7 +23,6 @@ class CSnippetGenerator():
 		'''
 		sequentialBlocks = [(i, data) for i, data in kannGraph.g.items()]
 		sequentialBlocks.sort(key=lambda x: x[0], reverse=True) # Sort reversely because the output layer has the lowest index
-		
 		inputBlock = self._build_input(inputShape)
 		codeBlocks = [inputBlock]
 
@@ -35,16 +35,24 @@ class CSnippetGenerator():
 				codeBlock = self._build_dense(block)
 
 			elif name == 'relu':
-				codeBlock = self._build_relu(block)
+				codeBlock = self._build_relu()
+
+			elif name == 'sigm':
+				codeBlock = self._build_sigm()
 				
 			else:
 				raise NotImplementedError
 
 			codeBlocks.append(codeBlock)
 
+
 		with open(f'{outputPath}/model.c', 'w') as f:
 			f.write(self.base.render(codeBlocks=codeBlocks))
 
+		# Output header file of model
+		with open(f'{outputPath}/model.h', 'w') as f:
+			f.write(self.header.render())
+	
 	def _build_input(self, inputShape):
 		'''
 		'''
@@ -80,7 +88,7 @@ class CSnippetGenerator():
 		return template.render(
 			weights=weights, bias=bias, output=output)
 
-	def _build_relu(self, block):
+	def _build_relu(self):
 		'''
 		'''
 		template = self.env.get_template('relu.c')
@@ -89,7 +97,8 @@ class CSnippetGenerator():
 	def _build_sigm(self):
 		'''
 		'''
-		pass
+		template = self.env.get_template('sigm.c')
+		return template.render()
 
 	def _build_tanh(self):
 		'''
