@@ -9,5 +9,6 @@ kann_t *init_nn() {
 	{% for b in codeBlocks %}
 	{{b}}
 	{%- endfor %}
+	t->ext_flag = KANN_F_OUT;
 	return nn;
 }
