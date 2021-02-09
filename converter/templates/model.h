@@ -1,0 +1,1 @@
+kann_t *init_nn();
