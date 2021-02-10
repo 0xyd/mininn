@@ -289,7 +289,7 @@ class TfliteGraph():
 			# Build input layers
 			for i in inputs:
 				inputName = self._to_string(tensors[i]['name'])
-				layers[str(i)] = {
+				layers[tuple(str(i))] = {
 					'name': inputName,
 					'size': tensors[i]['shape'],
 				}
@@ -298,7 +298,7 @@ class TfliteGraph():
 			# Build output layers
 			for i, o in enumerate(outputs):
 				# outputName = self._to_string(tensors[o]['name'])
-				layers[str(o)] = {
+				layers[tuple(str(o))] = {
 					'name': f'output_{i}',
 					'size': tensors[o]['shape']
 				}
