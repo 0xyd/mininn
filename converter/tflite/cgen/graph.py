@@ -108,7 +108,7 @@ class TensorMapper(object):
 		# return html
 
 
-def GenerateGraph(subgraph_idx, g, opcode_mapper):
+def GenerateGraph(subgraphIdx, g, opcode_mapper):
 	"""Produces the HTML required to have a d3 visualization of the dag."""
 
 	def TensorName(idx):
@@ -169,7 +169,7 @@ def GenerateGraph(subgraph_idx, g, opcode_mapper):
 
 	# graph_str = json.dumps({"nodes": nodes, "edges": edges})
 
-	# html = _D3_HTML_TEMPLATE % (graph_str, subgraph_idx)
+	# html = _D3_HTML_TEMPLATE % (graph_str, subgraphIdx)
 	# return html
 
 class TfliteGraph():
@@ -202,7 +202,7 @@ class TfliteGraph():
 		# opcode_mapper = OpCodeMapper(data)
 		# pp.pprint(opcode_mapper.code2Name)		
 
-		# for subgraph_idx, g in enumerate(data["subgraphs"]):
+		# for subgraphIdx, g in enumerate(data["subgraphs"]):
 
 		# 	print("inputs:")
 		# 	pp.pprint(g["inputs"])
@@ -214,16 +214,18 @@ class TfliteGraph():
 		# 	tensor_mapper = TensorMapper(g)
 		# 	opcode_mapper = OpCodeMapper(data)
 			
-		# 	nodes, edges = GenerateGraph(subgraph_idx, g, opcode_mapper)
+		# 	nodes, edges = GenerateGraph(subgraphIdx, g, opcode_mapper)
 		# 	print("nodes:")
 		# 	print(nodes)
 		# 	print("edges:")
 		# 	print(edges)
 		# 	print('-'*5)
 		# pp.pprint(model)
-		self.g = {}
+		self.g = {
+			'subgraphs': []
+		}
+		self.tfliteData = None
 		self.visitedTensor = set()
-		self.interpreter = None
 		# interpreter = tf.lite.Interpreter(
 		# 	model_content=tfModel)
 		# interpreter.allocate_tensors()
@@ -244,29 +246,116 @@ class TfliteGraph():
 		# for i in range(100):
 		# 	print(BuiltinCodeToName(i))
 
-	def parse(self, tfModel):
+	def parse(self, tfliteModel, dtype=np.float32):
 		'''
 		Op (operations) are composed of tensors.
 	
 
-		tfModel: <byte>
+		tfliteModel: <byte>
 		tflite model in bytes. 
 
+		dtype: <np.dtype>
+		data type of weights
 		'''
-		self.interpreter = tf.lite.Interpreter(
-			model_content=tfModel)
-		self.interpreter.allocate_tensors()
-		
-		# Parse operations
-		for op in self.interpreter._get_ops_details():
-			
-			if op['op_name'] == 'FULLY_CONNECTED':
-				self._parse_dense_op(op)
-			# self.g[opIdx] = 
-			# for 
 
-		# Parse tensors:
-		# Single tensors are regarded as operation
+		data = schema_fb.Model.GetRootAsModel(tfliteModel, 0)
+		data = FlatbufferToDict(
+			schema_fb.ModelT.InitFromObj(data), 
+			preserve_as_numpy=True)
+
+		# Buffers are place where weights and bias values are allocated
+		buffers = data['buffers']
+		operatorCodes = data['operatorCodes']
+		# pp.pprint(operatorCodes)
+
+		for subgraphIdx, g in enumerate(data["subgraphs"]):
+
+			inputs = g['inputs']
+			outputs = g['outputs']
+			tensors = g['tensors']
+			operators = g['operators']
+			layers = {}
+			layerIdx = 0
+
+			# Move weight values from buffer to tensor
+			for idx, t in enumerate(tensors):
+				d = buffers[t['buffer']]['data']
+				if d is not None:
+					t['data'] = d.view(dtype)
+
+			# Build input layers
+			for i in inputs:
+				inputName = self._to_string(tensors[i]['name'])
+				layers[str(i)] = {
+					'name': inputName,
+					'size': tensors[i]['shape'],
+				}
+				self.visitedTensor.add(str(i))
+
+			# Build output layers
+			for o in outputs:
+				outputName = self._to_string(tensors[o]['name'])
+				layers[str(o)] = {
+					'name': outputName,
+					'size': tensors[o]['shape']
+				}
+				self.visitedTensor.add(str(o))
+
+			for op in g['operators']:
+
+				opName = BuiltinCodeToName(
+					operatorCodes[
+						op['opcodeIndex']]['builtinCode'])
+
+				if opName == 'FULLY_CONNECTED':
+					denseLayers = self._parse_dense_op(op, tensors)
+					for l in denseLayers:
+						layers.update(l)
+
+				elif opName == 'LOGISTIC':
+					logitLayer = self._parse_logit_op(op, tensors)
+					layers.update(logitLayer)
+
+			pp.pprint(layers)
+			print('='*10)
+			# pp.pprint(g)
+			# subgraph = {
+			# 	'inputs': {},
+			# 	'outputs': {},
+			# 	'layers': {}
+			# }
+			# tensors = g['tensors']
+			
+			# for idx in g['inputs']:
+			# 	subgraph['inputs'][idx] = tensors[idx]
+			# for idx in g['outputs']:
+			# 	subgraph['outputs'][idx] = tensors[idx]
+
+			
+
+			# for op in g['operators']:
+
+			# 	opName = BuiltinCodeToName(
+			# 		operatorCodes[
+			# 			op['opcodeIndex']]['builtinCode'])
+
+			# 	if opName == 'FULLY_CONNECTED':
+			# 		self._parse_dense_op(op, tensors)
+			# 	elif opName == 'LOGISTIC':
+			# 		raise NotImplementedError
+			# 	else:
+			# 		raise NotImplementedError
+			# 	break
+				# print(opName)
+				# pp.pprint(op)
+				# print('='*5)
+
+	def _to_string(self, name):
+		'''
+		name: list<int>
+		'''
+		return ''.join([chr(c) for c in name])
+
 
 	def _parse_op_inputs(self, op):
 		'''
@@ -275,7 +364,7 @@ class TfliteGraph():
 		op <dict>:
 
 		'''
-		return op['inputs'].tolist()
+		return [str(i) for i in op['inputs'].tolist()]
 
 	def _parse_op_outputs(self, op):
 		'''
@@ -284,49 +373,89 @@ class TfliteGraph():
 		op <dict>:
 
 		'''
-		return op['outputs'].tolist()		
+		return [str(i) for i in op['outputs'].tolist()]
 
-	def _parse_dense_op(self, op):
+	# def _parse_dense_op(self, layerIdx, layers, op, tfliteData):
+	def _parse_dense_op(self, op, tensors):
 		'''
 		'''
-		opIndex = op['index']
-		self.g[opIndex] = {'name': 'dense'}
-		self.g[opIndex]['inputs'] = \
-			self._parse_op_inputs(op)
-		self.g[opIndex]['outputs'] = \
-			self._parse_op_outputs(op)
 
-		# parse input tensors of operator
-		for idx in self.g[opIndex]['inputs']:
+		# Choose index that is not been used as index of dense layer
+		for idx in op['inputs']:
 
-			tensorMeta = self.interpreter._get_tensor_details(idx)
-			tensorName = tensorMeta['name'] 
-			# print("check TensorMeta")
-			# pp.pprint(tensorMeta)
-			# Access the weights from Matrix Multiplication
-			if 'MatMul' in tensorName and \
-				'BiasAdd' not in tensorName:
-				self.g[opIndex]['weights'] = {
-					'value': self.interpreter.get_tensor(idx),
-					'size': tensorMeta['shape']
+			if str(idx) in self.visitedTensor:
+				continue
+			else:
+				layerIdx = str(idx)
+
+		denseLayer = {
+			layerIdx: {
+				'name': 'dense',
+				'inputs': self._parse_op_inputs(op)
+			}
+		}
+
+		for idx in op['inputs']:
+
+			name = self._to_string(
+				tensors[idx]['name'])
+
+			if 'MatMul' in name and 'BiasAdd' not in name:
+				denseLayer[layerIdx]['weights'] = {
+					'value': tensors[idx]['data'],
+					'size': tensors[idx]['shape']
 				}
+				self.visitedTensor.add(str(idx))
 
-				self.visitedTensor.add(id(tensorMeta))
-
-			# Access the values from Bias
-			elif 'BiasAdd' in tensorName and \
-				'MatMul' not in tensorName:
-
-				self.g[opIndex]['bias'] = {
-					'value': self.interpreter.get_tensor(idx),
-					'size': tensorMeta['shape']
+			elif 'BiasAdd' in name and \
+				'MatMul' not in name:
+				denseLayer[layerIdx]['bias'] = {
+					'value': tensors[idx]['data'],
+					'size': tensors[idx]['shape']
 				}
-
-				self.visitedTensor.add(id(tensorMeta))
+				self.visitedTensor.add(str(idx))
 
 			else:
 				continue
 
+		# Relu and dense layer will be fused together in tensorflow lite!
+		# Hence we need to build an additional way to add relu
+		if op['builtinOptions']['fusedActivationFunction']:
+
+			fusedLayerIdx = f'f{layerIdx}'
+			reluLayer = {
+				fusedLayerIdx: {
+					'name': 'relu',
+					'inputs': [layerIdx],
+					'outputs': self._parse_op_outputs(op) 
+				},
+			}
+			denseLayer[layerIdx]['outputs'] = [fusedLayerIdx]
+
+			return [denseLayer, reluLayer]
+
+		else:
+			denseLayer[layerIdx]['outputs'] = \
+				self._parse_op_outputs(op)
+			return [denseLayer]
+
+
+
+	def _parse_relu_op(self, ):
+		pass
+
+	def _parse_logit_op(self, op, tensors):
+		'''
+		'''
+		layerIdx = str(op['inputs'][0])
+		layer = {
+			layerIdx: {
+				'name': 'logit',
+				'shape': tensors[op['inputs'][0]]['shape'],
+				'outputs': self._parse_op_outputs(op),
+			}
+		}
+		return layer
 
 # class iKannForwardGraph():
 
