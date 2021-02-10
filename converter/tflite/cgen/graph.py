@@ -266,6 +266,7 @@ class TfliteGraph():
 		# Buffers are place where weights and bias values are allocated
 		buffers = data['buffers']
 		operatorCodes = data['operatorCodes']
+
 		# pp.pprint(operatorCodes)
 
 		for subgraphIdx, g in enumerate(data["subgraphs"]):
@@ -276,6 +277,8 @@ class TfliteGraph():
 			operators = g['operators']
 			layers = {}
 			layerIdx = 0
+
+			# pp.pprint(g)
 
 			# Move weight values from buffer to tensor
 			for idx, t in enumerate(tensors):
@@ -293,10 +296,10 @@ class TfliteGraph():
 				self.visitedTensor.add(str(i))
 
 			# Build output layers
-			for o in outputs:
-				outputName = self._to_string(tensors[o]['name'])
+			for i, o in enumerate(outputs):
+				# outputName = self._to_string(tensors[o]['name'])
 				layers[str(o)] = {
-					'name': outputName,
+					'name': f'output_{i}',
 					'size': tensors[o]['shape']
 				}
 				self.visitedTensor.add(str(o))
@@ -316,39 +319,12 @@ class TfliteGraph():
 					logitLayer = self._parse_logit_op(op, tensors)
 					layers.update(logitLayer)
 
+				elif opName == 'RELU':
+					reluLayer = self._parse_relu_op(op, tensors)
+					layers.update(reluLayer)
+
 			pp.pprint(layers)
-			print('='*10)
-			# pp.pprint(g)
-			# subgraph = {
-			# 	'inputs': {},
-			# 	'outputs': {},
-			# 	'layers': {}
-			# }
-			# tensors = g['tensors']
-			
-			# for idx in g['inputs']:
-			# 	subgraph['inputs'][idx] = tensors[idx]
-			# for idx in g['outputs']:
-			# 	subgraph['outputs'][idx] = tensors[idx]
-
-			
-
-			# for op in g['operators']:
-
-			# 	opName = BuiltinCodeToName(
-			# 		operatorCodes[
-			# 			op['opcodeIndex']]['builtinCode'])
-
-			# 	if opName == 'FULLY_CONNECTED':
-			# 		self._parse_dense_op(op, tensors)
-			# 	elif opName == 'LOGISTIC':
-			# 		raise NotImplementedError
-			# 	else:
-			# 		raise NotImplementedError
-			# 	break
-				# print(opName)
-				# pp.pprint(op)
-				# print('='*5)
+			# print('='*10)
 
 	def _to_string(self, name):
 		'''
@@ -381,12 +357,7 @@ class TfliteGraph():
 		'''
 
 		# Choose index that is not been used as index of dense layer
-		for idx in op['inputs']:
-
-			if str(idx) in self.visitedTensor:
-				continue
-			else:
-				layerIdx = str(idx)
+		layerIdx = tuple(s for s in self._parse_op_inputs(op))
 
 		denseLayer = {
 			layerIdx: {
@@ -422,7 +393,7 @@ class TfliteGraph():
 		# Hence we need to build an additional way to add relu
 		if op['builtinOptions']['fusedActivationFunction']:
 
-			fusedLayerIdx = f'f{layerIdx}'
+			fusedLayerIdx = tuple('f') + layerIdx
 			reluLayer = {
 				fusedLayerIdx: {
 					'name': 'relu',
@@ -439,15 +410,26 @@ class TfliteGraph():
 				self._parse_op_outputs(op)
 			return [denseLayer]
 
-
-
-	def _parse_relu_op(self, ):
-		pass
+	def _parse_relu_op(self, op, tensors):
+		'''
+		'''
+		layerIdx = tuple(
+			s for s in self._parse_op_inputs(op))
+		layer = {
+			layerIdx: {
+				'name': 'relu',
+				'shape': tensors[op['inputs'][0]]['shape'],
+				'outputs': self._parse_op_outputs(op)
+			}
+		}
+		
+		return layer
 
 	def _parse_logit_op(self, op, tensors):
 		'''
 		'''
-		layerIdx = str(op['inputs'][0])
+		layerIdx = tuple(s for s in self._parse_op_inputs(op))
+		# layerIdx = str(op['inputs'][0])
 		layer = {
 			layerIdx: {
 				'name': 'logit',
