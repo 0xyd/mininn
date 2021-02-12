@@ -2,6 +2,7 @@ import pprint
 import numpy as np
 import tensorflow as tf
 from tensorflow.lite.python import schema_py_generated as schema_fb
+
 pp = pprint.PrettyPrinter(indent=4)
 
 
@@ -79,8 +80,6 @@ class iKannGraph():
 		buffers = data['buffers']
 		operatorCodes = data['operatorCodes']
 
-		# pp.pprint(operatorCodes)
-
 		for subgraphIdx, g in enumerate(data["subgraphs"]):
 
 			inputs = g['inputs']
@@ -124,9 +123,6 @@ class iKannGraph():
 					'name': f'output_{i}',
 					'size': tensors[o]['shape']
 				}
-				print('='*5)
-				pp.pprint(tensors[o])
-				print('='*5)
 				self.visitedTensor.add(str(o))
 
 			# Build layers for operators
@@ -149,22 +145,31 @@ class iKannGraph():
 					reluLayer = self._build_relu_layer(op, tensors)
 					layers.update(reluLayer)
 
-			# pp.pprint(layers)
-			# print('='*30)
+				elif opName == 'SOFTMAX':
+					softmaxLayer = self._build_softmax_layer(op, tensors)
+					layers.update(softmaxLayer)
+
+				else:
+					raise NotImplementedError
+
 			# Link to next layers
 			for layerId, layerData in layers.items():
+
 				if 'outputs' in layerData:
+
+					if len(layerData['outputs']) == len(layerData['nextLayer']):
+						continue
+
 					for o in layerData['outputs']:
 						for _layerId, _layerData in layers.items():
-							# print(_layerData['inputs'])
-							# print(_layerData['inputs'])
+
+							# Handle the input layer case
 							if 'inputs' in _layerData:
 								if o in _layerData['inputs']:
 									layerData['nextLayer'].append(_layerId)
 							elif str(o) == _layerId:
 								layerData['nextLayer'].append(_layerId)
 
-			pp.pprint(layers)
 
 			self.g['subgraphs'].append(layers)
 		
@@ -178,25 +183,6 @@ class iKannGraph():
 			return name_list
 		else:
 			return ''.join([chr(c) for c in name])
-
-
-	def _parse_op_inputs(self, op):
-		'''
-		Parse input of an operation
-
-		op <dict>:
-		operators in tflite graph
-		'''
-		return [str(i) for i in op['inputs'].tolist()]
-
-	def _parse_op_outputs(self, op):
-		'''
-		Parse output of an operation
-
-		op <dict>:
-		operators in tflite graph
-		'''
-		return [str(i) for i in op['outputs'].tolist()]
 
 	def _build_dense_layer(self, op, tensors):
 		'''
@@ -263,29 +249,48 @@ class iKannGraph():
 	def _build_relu_layer(self, op, tensors):
 		'''
 		'''
+		idx = op['inputs'][0]
 		layer = {
 			op['operatorIdx']: {
 				'name': 'relu',
-				'shape': tensors[op['inputs'][0]]['shape'],
+				'shape': tensors[idx]['shape'],
 				'inputs':  op['inputs'],
 				'outputs': op['outputs'],
 				'nextLayer': []
 			}
 		}
+		self.visitedTensor.add(idx)
 		
 		return layer
 
 	def _build_logit_layer(self, op, tensors):
 		'''
 		'''
+		idx = op['inputs'][0]
 		layer = {
 			op['operatorIdx']: {
 				'name': 'logit',
-				'shape': tensors[op['inputs'][0]]['shape'],
+				'shape': tensors[idx]['shape'],
 				'inputs':  op['inputs'],
 				'outputs': op['outputs'],
 				'nextLayer': []
 			}
 		}
+		self.visitedTensor.add(str(idx))
 		return layer
 
+	def _build_softmax_layer(self, op, tensors):
+		'''
+		'''
+		idx = op['inputs'][0]
+		layer = {
+			op['operatorIdx']: {
+				'name': 'softmax',
+				'shape': tensors[idx]['shape'],
+				'inputs':  op['inputs'],
+				'outputs': op['outputs'],
+				'nextLayer': []
+			}
+		}
+		self.visitedTensor.add(str(idx))
+		return layer
