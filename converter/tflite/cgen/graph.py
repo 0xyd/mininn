@@ -250,13 +250,13 @@ class iKannGraph():
 			denseLayer[layerId]['nextLayer'] = []
 			return [denseLayer]
 
-	def _build_relu_layer(self, op, tensors):
+	def __build_activation_layer(self, op, opName, tensors):
 		'''
 		'''
 		idx = op['inputs'][0]
 		layer = {
 			op['operatorIdx']: {
-				'name': 'relu',
+				'name': opName,
 				'shape': tensors[idx]['shape'],
 				'inputs':  op['inputs'],
 				'outputs': op['outputs'],
@@ -264,54 +264,79 @@ class iKannGraph():
 			}
 		}
 		self.visitedTensor.add(idx)
-		
 		return layer
+
+
+	def _build_relu_layer(self, op, tensors):
+		'''
+		'''
+		return self.__build_activation_layer(
+			op, 'relu', tensors)
+		# idx = op['inputs'][0]
+		# layer = {
+		# 	op['operatorIdx']: {
+		# 		'name': 'relu',
+		# 		'shape': tensors[idx]['shape'],
+		# 		'inputs':  op['inputs'],
+		# 		'outputs': op['outputs'],
+		# 		'nextLayer': []
+		# 	}
+		# }
+		# self.visitedTensor.add(idx)
+		
+		# return layer
 
 	def _build_tanh_layer(self, op, tensors):
 		'''
 		'''
-		idx = op['inputs'][0]
-		layer = {
-			op['operatorIdx']: {
-				'name': 'tanh',
-				'shape': tensors[idx]['shape'],
-				'inputs':  op['inputs'],
-				'outputs': op['outputs'],
-				'nextLayer': []
-			}
-		}
-		self.visitedTensor.add(idx)
+		return self.__build_activation_layer(
+			op, 'tanh', tensors)
+		# idx = op['inputs'][0]
+		# layer = {
+		# 	op['operatorIdx']: {
+		# 		'name': 'tanh',
+		# 		'shape': tensors[idx]['shape'],
+		# 		'inputs':  op['inputs'],
+		# 		'outputs': op['outputs'],
+		# 		'nextLayer': []
+		# 	}
+		# }
+		# self.visitedTensor.add(idx)
 		
-		return layer
+		# return layer
 
 	def _build_logit_layer(self, op, tensors):
 		'''
 		'''
-		idx = op['inputs'][0]
-		layer = {
-			op['operatorIdx']: {
-				'name': 'logit',
-				'shape': tensors[idx]['shape'],
-				'inputs':  op['inputs'],
-				'outputs': op['outputs'],
-				'nextLayer': []
-			}
-		}
-		self.visitedTensor.add(str(idx))
-		return layer
+		return self.__build_activation_layer(
+			op, 'logit', tensors)
+		# idx = op['inputs'][0]
+		# layer = {
+		# 	op['operatorIdx']: {
+		# 		'name': 'logit',
+		# 		'shape': tensors[idx]['shape'],
+		# 		'inputs':  op['inputs'],
+		# 		'outputs': op['outputs'],
+		# 		'nextLayer': []
+		# 	}
+		# }
+		# self.visitedTensor.add(str(idx))
+		# return layer
 
 	def _build_softmax_layer(self, op, tensors):
 		'''
 		'''
-		idx = op['inputs'][0]
-		layer = {
-			op['operatorIdx']: {
-				'name': 'softmax',
-				'shape': tensors[idx]['shape'],
-				'inputs':  op['inputs'],
-				'outputs': op['outputs'],
-				'nextLayer': []
-			}
-		}
-		self.visitedTensor.add(str(idx))
-		return layer
+		return self.__build_activation_layer(
+			op, 'softmax', tensors)
+		# idx = op['inputs'][0]
+		# layer = {
+		# 	op['operatorIdx']: {
+		# 		'name': 'softmax',
+		# 		'shape': tensors[idx]['shape'],
+		# 		'inputs':  op['inputs'],
+		# 		'outputs': op['outputs'],
+		# 		'nextLayer': []
+		# 	}
+		# }
+		# self.visitedTensor.add(str(idx))
+		# return layer
