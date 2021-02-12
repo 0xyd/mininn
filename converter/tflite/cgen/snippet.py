@@ -36,6 +36,8 @@ class CSnippetGenerator():
 			# Travese from the input layers
 			for layer in inputLayers:
 
+				codeBlocks.append(self._build_input(layer))
+
 				while True:
 
 					if 'nextLayer' in layer:
@@ -106,7 +108,7 @@ class CSnippetGenerator():
 		template = self.env.get_template('dense.c')
 		weights = layer['weights']['value'].flatten()
 		bias = layer['bias']['value']
-		output = layer['bias']['size'][0]
+		output = layer['bias']['shape'][0]
 
 		return template.render(
 			weights=weights, bias=bias, output=output)

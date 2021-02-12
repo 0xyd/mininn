@@ -105,7 +105,7 @@ class iKannGraph():
 					tensors[i]['name'])
 				layers[str(i)] = {
 					'name': inputName,
-					'size': tensors[i]['shape'],
+					'shape': tensors[i]['shape'],
 					'nextLayer': []
 				}
 
@@ -121,7 +121,7 @@ class iKannGraph():
 				# outputName = self.namelist_to_string(tensors[o]['name'])
 				layers[str(o)] = {
 					'name': f'output_{i}',
-					'size': tensors[o]['shape']
+					'shape': tensors[o]['shape']
 				}
 				self.visitedTensor.add(str(o))
 
@@ -210,7 +210,7 @@ class iKannGraph():
 			if 'MatMul' in name and 'BiasAdd' not in name:
 				denseLayer[layerId]['weights'] = {
 					'value': tensors[idx]['data'],
-					'size': tensors[idx]['shape']
+					'shape': tensors[idx]['shape']
 				}
 				self.visitedTensor.add(str(idx))
 
@@ -218,7 +218,7 @@ class iKannGraph():
 				'MatMul' not in name:
 				denseLayer[layerId]['bias'] = {
 					'value': tensors[idx]['data'],
-					'size': tensors[idx]['shape']
+					'shape': tensors[idx]['shape']
 				}
 				self.visitedTensor.add(str(idx))
 
