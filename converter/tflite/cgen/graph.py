@@ -5,34 +5,12 @@ from tensorflow.lite.python import schema_py_generated as schema_fb
 pp = pprint.PrettyPrinter(indent=4)
 
 
-def TensorTypeToName(tensor_type):
-	"""Converts a numerical enum to a readable tensor type."""
-	for name, value in schema_fb.TensorType.__dict__.items():
-		if value == tensor_type:
-			return name
-	return None
-
 def BuiltinCodeToName(code):
 	"""Converts a builtin op code enum to a readable name."""
 	for name, value in schema_fb.BuiltinOperator.__dict__.items():
 		if value == code:
 			return name
 	return None
-
-class OpCodeMapper(object):
-	"""Maps an opcode index to an op name."""
-
-	def __init__(self, data):
-		self.code2Name = {}
-		for idx, d in enumerate(data["operatorCodes"]):
-			self.code2Name[idx] = BuiltinCodeToName(d["builtinCode"])
-
-	def __call__(self, x):
-		if x not in self.code2Name:
-			s = "<UNKNOWN>"
-		else:
-			s = self.code2Name[x]
-		return "%s (%d)" % (s, x)
 
 def FlatbufferToDict(fb, preserve_as_numpy):
 	"""
@@ -65,186 +43,20 @@ def FlatbufferToDict(fb, preserve_as_numpy):
 	else:
 		return fb
 
-def NameListToString(name_list):
-	"""Converts a list of integers to the equivalent ASCII string."""
-	if isinstance(name_list, str):
-		return name_list
-	else:
-		result = ""
-		if name_list is not None:
-			for val in name_list:
-				result = result + chr(int(val))
-	return result
 
-
-class TensorMapper(object):
-	"""Maps a list of tensor indices to a tooltip hoverable indicator of more."""
-
-	def __init__(self, subgraph_data):
-		self.data = subgraph_data
-
-	def __call__(self, x):
-		# html = ""
-		# html += "<span class='tooltip'><span class='tooltipcontent'>"
-		for i in x:
-			tensor = self.data["tensors"][i]
-			print(NameListToString(tensor["name"]))
-			print(TensorTypeToName(tensor["type"]))
-			print(repr(tensor["shape"]) if "shape" in tensor else [])
-			print(repr(tensor["shape_signature"]) 
-				if "shape_signature" in tensor else [])
-			# html += str(i) + " "
-
-			# html += NameListToString(tensor["name"]) + " "
-			# html += TensorTypeToName(tensor["type"]) + " "
-			# html += (repr(tensor["shape"]) if "shape" in tensor else "[]")
-			# html += (repr(tensor["shape_signature"])
-			# 	if "shape_signature" in tensor else "[]") + "<br>"
-
-		print(x)
-		# html += "</span>"
-		# html += repr(x)
-		# html += "</span>"
-		# return html
-
-
-def GenerateGraph(subgraphIdx, g, opcode_mapper):
-	"""Produces the HTML required to have a d3 visualization of the dag."""
-
-	def TensorName(idx):
-		return "t%d" % idx
-
-	def OpName(idx):
-		return "o%d" % idx
-
-	edges = []
-	nodes = []
-	first = {}
-	second = {}
-	# pixel_mult = 200  # TODO(aselle): multiplier for initial placement
-	# width_mult = 170  # TODO(aselle): multiplier for initial placement
-	for op_index, op in enumerate(g["operators"]):
-
-		for tensor_input_position, tensor_index in enumerate(op["inputs"]):
-			# if tensor_index not in first:
-			# 	first[tensor_index] = ((op_index - 0.5 + 1) * pixel_mult,
-   #  	                           (tensor_input_position + 1) * width_mult)
-			edges.append({
-				"source": TensorName(tensor_index),
-				"target": OpName(op_index)
-			})
-		for tensor_output_position, tensor_index in enumerate(op["outputs"]):
-			# if tensor_index not in second:
-			# 	second[tensor_index] = ((op_index + 0.5 + 1) * pixel_mult,
-   #                              	(tensor_output_position + 1) * width_mult)
-			edges.append({
-				"target": TensorName(tensor_index),
-				"source": OpName(op_index)
-			})
-
-		print(f"op['opcodeIndex']: {op['opcodeIndex']}")
-
-		nodes.append({
-			"id": OpName(op_index),
-			"name": opcode_mapper(op["opcodeIndex"]),
-			"group": 2,
-			# "x": pixel_mult,
-			# "y": (op_index + 1) * pixel_mult
-		})
-
-	for tensor_index, tensor in enumerate(g["tensors"]):
-		# initial_y = (
-		# 	first[tensor_index] if tensor_index in first else
-		# 	second[tensor_index] if tensor_index in second else (0, 0))
-
-		nodes.append({
-			"id": TensorName(tensor_index),
-			"name": "%r (%d)" % (getattr(tensor, "shape", []), tensor_index),
-			"group": 1,
-			# "x": initial_y[1],
-			# "y": initial_y[0]
-		})
-
-	return nodes, edges
-
-	# graph_str = json.dumps({"nodes": nodes, "edges": edges})
-
-	# html = _D3_HTML_TEMPLATE % (graph_str, subgraphIdx)
-	# return html
-
-class TfliteGraph():
+class iKannGraph():
 
 	def __init__(self):
 		'''
 
 		'''
-		# modelObj = schema_fb.Model.GetRootAsModel(tfModel, 0)
-		# data = FlatbufferToDict(
-		# 	schema_fb.ModelT.InitFromObj(modelObj), 
-		# 	preserve_as_numpy=False)
-		# pp.pprint(data)
-		# print('='*5)
-		# print(f'len(data["buffers"]): {len(data["buffers"])}')
-		# print(f'len(data["subgraphs"][0]["operators"]): {len(data["subgraphs"][0]["operators"])}')
-		# print(f'len(data["subgraphs"][0]["tensors"]): {len(data["subgraphs"][0]["tensors"])}')
 		
-		# for i in range(20):
-		# 	print(f'BuiltinCodeToName({i}):{BuiltinCodeToName(i)}')
-		# pp.pprint(len(data["subgraphs"]))
-		# pp.pprint(data['operatorCodes'])
-
-		 # Update builtin code fields.
-		# for idx, d in enumerate(data["operatorCodes"]):
-		# 	print(f"idx: {idx}")
-		# 	d["builtinCode"] = max(
-		# 		d["builtinCode"], d["deprecatedBuiltinCode"])
-
-		# opcode_mapper = OpCodeMapper(data)
-		# pp.pprint(opcode_mapper.code2Name)		
-
-		# for subgraphIdx, g in enumerate(data["subgraphs"]):
-
-		# 	print("inputs:")
-		# 	pp.pprint(g["inputs"])
-		# 	print("outputs:")
-		# 	pp.pprint(g["outputs"])
-		# 	print("tensors:")
-		# 	pp.pprint(g["tensors"])
-		# 	# print("op code mapper")
-		# 	tensor_mapper = TensorMapper(g)
-		# 	opcode_mapper = OpCodeMapper(data)
-			
-		# 	nodes, edges = GenerateGraph(subgraphIdx, g, opcode_mapper)
-		# 	print("nodes:")
-		# 	print(nodes)
-		# 	print("edges:")
-		# 	print(edges)
-		# 	print('-'*5)
-		# pp.pprint(model)
 		self.g = {
 			'subgraphs': []
 		}
 		self.tfliteData = None
 		self.visitedTensor = set()
-		# interpreter = tf.lite.Interpreter(
-		# 	model_content=tfModel)
-		# interpreter.allocate_tensors()
-		# # layers = interpreter.get_tensor_details()
-		# pp.pprint(interpreter._get_ops_details())
-		# print('='*5)
-		# pp.pprint(interpreter.get_tensor_details())
-		# print('='*5)
-		# # pp.pprint(interpreter.get_input_details())
-		# # print('='*5)
-		# for op in interpreter._get_ops_details():
-		# 	print("tensors in op: ")
-		# 	for i in op['inputs']:
-		# 		pp.pprint(interpreter._get_tensor_details(i))
-		# 		pp.pprint(interpreter.get_tensor(i))
-		# 	print("*"*10)
-
-		# for i in range(100):
-		# 	print(BuiltinCodeToName(i))
+		
 
 	def parse(self, tfliteModel, dtype=np.float32):
 		'''
@@ -276,9 +88,10 @@ class TfliteGraph():
 			tensors = g['tensors']
 			operators = g['operators']
 			layers = {}
-			layerIdx = 0
 
-			# pp.pprint(g)
+			# Indexing operator
+			for idx, op in enumerate(g['operators']):
+				op['operatorIdx'] = f'op{idx}'
 
 			# Move weight values from buffer to tensor
 			for idx, t in enumerate(tensors):
@@ -288,22 +101,35 @@ class TfliteGraph():
 
 			# Build input layers
 			for i in inputs:
-				inputName = self._to_string(tensors[i]['name'])
-				layers[tuple(str(i))] = {
+
+				inputName = self.namelist_to_string(
+					tensors[i]['name'])
+				layers[str(i)] = {
 					'name': inputName,
 					'size': tensors[i]['shape'],
+					'nextLayer': []
 				}
+
+				for op in g['operators']:
+					if i in op['inputs']:
+						layers[str(i)]['nextLayer'].append(
+							op['operatorIdx'])
+				
 				self.visitedTensor.add(str(i))
 
 			# Build output layers
 			for i, o in enumerate(outputs):
-				# outputName = self._to_string(tensors[o]['name'])
-				layers[tuple(str(o))] = {
+				# outputName = self.namelist_to_string(tensors[o]['name'])
+				layers[str(o)] = {
 					'name': f'output_{i}',
 					'size': tensors[o]['shape']
 				}
+				print('='*5)
+				pp.pprint(tensors[o])
+				print('='*5)
 				self.visitedTensor.add(str(o))
 
+			# Build layers for operators
 			for op in g['operators']:
 
 				opName = BuiltinCodeToName(
@@ -311,26 +137,47 @@ class TfliteGraph():
 						op['opcodeIndex']]['builtinCode'])
 
 				if opName == 'FULLY_CONNECTED':
-					denseLayers = self._parse_dense_op(op, tensors)
+					denseLayers = self._build_dense_layer(op, tensors)
 					for l in denseLayers:
 						layers.update(l)
 
 				elif opName == 'LOGISTIC':
-					logitLayer = self._parse_logit_op(op, tensors)
+					logitLayer = self._build_logit_layer(op, tensors)
 					layers.update(logitLayer)
 
 				elif opName == 'RELU':
-					reluLayer = self._parse_relu_op(op, tensors)
+					reluLayer = self._build_relu_layer(op, tensors)
 					layers.update(reluLayer)
 
-			pp.pprint(layers)
-			# print('='*10)
+			# pp.pprint(layers)
+			# print('='*30)
+			# Link to next layers
+			for layerId, layerData in layers.items():
+				if 'outputs' in layerData:
+					for o in layerData['outputs']:
+						for _layerId, _layerData in layers.items():
+							# print(_layerData['inputs'])
+							# print(_layerData['inputs'])
+							if 'inputs' in _layerData:
+								if o in _layerData['inputs']:
+									layerData['nextLayer'].append(_layerId)
+							elif str(o) == _layerId:
+								layerData['nextLayer'].append(_layerId)
 
-	def _to_string(self, name):
+			pp.pprint(layers)
+
+			self.g['subgraphs'].append(layers)
+		
+		return self.g
+
+	def namelist_to_string(self, name):
 		'''
 		name: list<int>
 		'''
-		return ''.join([chr(c) for c in name])
+		if isinstance(name, str):
+			return name_list
+		else:
+			return ''.join([chr(c) for c in name])
 
 
 	def _parse_op_inputs(self, op):
@@ -338,7 +185,7 @@ class TfliteGraph():
 		Parse input of an operation
 
 		op <dict>:
-
+		operators in tflite graph
 		'''
 		return [str(i) for i in op['inputs'].tolist()]
 
@@ -347,32 +194,35 @@ class TfliteGraph():
 		Parse output of an operation
 
 		op <dict>:
-
+		operators in tflite graph
 		'''
 		return [str(i) for i in op['outputs'].tolist()]
 
-	# def _parse_dense_op(self, layerIdx, layers, op, tfliteData):
-	def _parse_dense_op(self, op, tensors):
+	def _build_dense_layer(self, op, tensors):
 		'''
+		Parse the tensors and
+
+		op <dict>:
+		operators in tflite graph
 		'''
 
 		# Choose index that is not been used as index of dense layer
-		layerIdx = tuple(s for s in self._parse_op_inputs(op))
-
+		layerId = op['operatorIdx']
 		denseLayer = {
-			layerIdx: {
+			layerId: {
 				'name': 'dense',
-				'inputs': self._parse_op_inputs(op)
+				'inputs': op['inputs'],
+				'outputs': op['outputs']
 			}
 		}
 
 		for idx in op['inputs']:
 
-			name = self._to_string(
+			name = self.namelist_to_string(
 				tensors[idx]['name'])
 
 			if 'MatMul' in name and 'BiasAdd' not in name:
-				denseLayer[layerIdx]['weights'] = {
+				denseLayer[layerId]['weights'] = {
 					'value': tensors[idx]['data'],
 					'size': tensors[idx]['shape']
 				}
@@ -380,7 +230,7 @@ class TfliteGraph():
 
 			elif 'BiasAdd' in name and \
 				'MatMul' not in name:
-				denseLayer[layerIdx]['bias'] = {
+				denseLayer[layerId]['bias'] = {
 					'value': tensors[idx]['data'],
 					'size': tensors[idx]['shape']
 				}
@@ -393,201 +243,49 @@ class TfliteGraph():
 		# Hence we need to build an additional way to add relu
 		if op['builtinOptions']['fusedActivationFunction']:
 
-			fusedLayerIdx = tuple('f') + layerIdx
+			fusedLayerId = 'r' + layerId
 			reluLayer = {
-				fusedLayerIdx: {
+				fusedLayerId: {
 					'name': 'relu',
-					'inputs': [layerIdx],
-					'outputs': self._parse_op_outputs(op) 
+					'outputs': op['outputs'],
+					'nextLayer': []
 				},
 			}
-			denseLayer[layerIdx]['outputs'] = [fusedLayerIdx]
+			denseLayer[layerId]['nextLayer'] = [fusedLayerId]
 
 			return [denseLayer, reluLayer]
 
 		else:
-			denseLayer[layerIdx]['outputs'] = \
-				self._parse_op_outputs(op)
+			denseLayer[layerId]['outputs'] = op['outputs']
+			denseLayer[layerId]['nextLayer'] = []
 			return [denseLayer]
 
-	def _parse_relu_op(self, op, tensors):
+	def _build_relu_layer(self, op, tensors):
 		'''
 		'''
-		layerIdx = tuple(
-			s for s in self._parse_op_inputs(op))
 		layer = {
-			layerIdx: {
+			op['operatorIdx']: {
 				'name': 'relu',
 				'shape': tensors[op['inputs'][0]]['shape'],
-				'outputs': self._parse_op_outputs(op)
+				'inputs':  op['inputs'],
+				'outputs': op['outputs'],
+				'nextLayer': []
 			}
 		}
 		
 		return layer
 
-	def _parse_logit_op(self, op, tensors):
+	def _build_logit_layer(self, op, tensors):
 		'''
 		'''
-		layerIdx = tuple(s for s in self._parse_op_inputs(op))
-		# layerIdx = str(op['inputs'][0])
 		layer = {
-			layerIdx: {
+			op['operatorIdx']: {
 				'name': 'logit',
 				'shape': tensors[op['inputs'][0]]['shape'],
-				'outputs': self._parse_op_outputs(op),
+				'inputs':  op['inputs'],
+				'outputs': op['outputs'],
+				'nextLayer': []
 			}
 		}
 		return layer
-
-# class iKannForwardGraph():
-
-# 	def __init__(self):
-# 		'''
-# 		iKannForwardGraph is a graph based on ikann format
-
-# 		'''
-# 		interpreter = tf.lite.Interpreter(
-# 			model_content=tfModel)
-# 		interpreter.allocate_tensors()
-# 		layers = interpreter.get_tensor_details()
-# 		pp.pprint(layers)
-
-# 	def parse(self, backpropGraph):
-# 		'''
-# 		parse backpropgation graph of pytorch model. 
-# 		The parse algorithm takes idea from torchviz package:
-# 		https://github.com/szagoruyko/pytorchviz/blob/master/torchviz/dot.py
-
-# 		backpropGraph:
-# 		backpropGraph of pytorch model
-# 		'''
-# 		startNodes = []
-# 		for nid in backpropGraph.keys():
-# 			if 'output' in backpropGraph[nid]:
-# 				startNodes.append(nid)
-
-# 		for nid in startNodes:
-# 			self._parse(nid, backpropGraph)
-
-# 	def _parse(self, nodeId, graph):
-# 		'''
-# 		The implementation details of recursive parsing.
-
-# 		nodeId:
-# 		Id of operation node.
-
-# 		graph:
-# 		backprop graph of pytorch model
-# 		'''
-# 		if nodeId not in self.visitedOperation:
-
-# 			if 'ReluBackward' in graph[nodeId]['name']:
-# 				self._build_relu_block(nodeId, graph)
-
-# 			elif 'AddmmBackward' in graph[nodeId]['name']:
-# 				self._build_dense_block(nodeId, graph)
-
-# 			elif 'SigmoidBackward' in graph[nodeId]['name']:
-# 				self._build_sigm_block(nodeId, graph)
-
-# 			elif 'TanhBackward' in graph[nodeId]['name']:
-# 				self._build_tanh_block(nodeId, graph)
-
-# 			if self.layerIdx > 0:
-# 				self.g[self.layerIdx]['next'] = self.layerIdx-1
-
-# 			self.layerIdx += 1
-# 			self.visitedOperation.add(nodeId)
-
-# 			for c in graph[nodeId]['children']:
-# 				self._parse(c, graph)
-
-
-# 	def _build_dense_block(self, nodeId, graph):
-# 		'''
-# 		Build dense block. 
-
-# 		nodeId:
-# 		Id of operation node.
-
-# 		graph:
-# 		backprop graph of pytorch model
-# 		'''
-# 		self.g[self.layerIdx] = {'name': 'dense'}
-
-# 		children = graph[nodeId]['children']
-
-# 		for c in children:
-
-# 			if graph[c]['name'] == 'AccumulateGrad':
-# 				self.g[self.layerIdx]['bias'] = {
-# 					'value': graph[c]['weights'],
-# 					'size': graph[c]['size']
-# 				}
-# 				self.visitedOperation.add(c)
-
-# 			# The children of 'TBackward' is weight
-# 			elif 'TBackward' in graph[c]['name']:
-
-# 				self.visitedOperation.add(c)
-# 				c = graph[c]['children'][0]
-
-# 				for c in graph[c]['children']:
-# 					print(graph[c])
-# 					print('='*10)
-# 				self.g[self.layerIdx]['weights'] = {
-# 					'value': graph[c]['weights'],
-# 					'size': graph[c]['size']
-# 				}
-# 			else:
-# 				continue
-
-# 	def _build_relu_block(self, nodeId, graph):
-# 		'''
-# 		Build relu block in graph.
-
-# 		nodeId:
-# 		Id of operation node.
-
-# 		graph:
-# 		backprop graph of pytorch model
-# 		'''
-
-# 		self.g[self.layerIdx] = {'name': 'relu'}
-# 		if 'output' in graph[nodeId]:
-# 			self.g[self.layerIdx]['output'] = True
-
-# 	def _build_sigm_block(self, nodeId, graph):
-# 		'''
-# 		Build sigm block in graph
-
-# 		nodeId:
-# 		Id of operation node.
-
-# 		graph:
-# 		backprop graph of pytorch model
-# 		'''
-# 		self.g[self.layerIdx] = {'name': 'sigm'}
-# 		if 'output' in graph[nodeId]:
-# 			self.g[self.layerIdx]['output'] = True
-
-# 	def _build_tanh_block(self, nodeId, graph):
-# 		'''
-# 		Build sigm block in graph
-
-# 		nodeId:
-# 		Id of operation node.
-
-# 		graph:
-# 		backprop graph of pytorch model
-# 		'''
-# 		self.g[self.layerIdx] = {'name': 'tanh'}
-# 		if 'output' in graph[nodeId]:
-# 			self.g[self.layerIdx]['output'] = True
-
-# 	def _build_softmax_block(self):
-# 		pass
-
-
-
 
