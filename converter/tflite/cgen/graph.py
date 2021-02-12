@@ -145,6 +145,10 @@ class iKannGraph():
 					reluLayer = self._build_relu_layer(op, tensors)
 					layers.update(reluLayer)
 
+				elif opName == 'TANH':
+					tanhLayer = self._build_tanh_layer(op, tensors)
+					layers.update(tanhLayer)
+
 				elif opName == 'SOFTMAX':
 					softmaxLayer = self._build_softmax_layer(op, tensors)
 					layers.update(softmaxLayer)
@@ -253,6 +257,23 @@ class iKannGraph():
 		layer = {
 			op['operatorIdx']: {
 				'name': 'relu',
+				'shape': tensors[idx]['shape'],
+				'inputs':  op['inputs'],
+				'outputs': op['outputs'],
+				'nextLayer': []
+			}
+		}
+		self.visitedTensor.add(idx)
+		
+		return layer
+
+	def _build_tanh_layer(self, op, tensors):
+		'''
+		'''
+		idx = op['inputs'][0]
+		layer = {
+			op['operatorIdx']: {
+				'name': 'tanh',
 				'shape': tensors[idx]['shape'],
 				'inputs':  op['inputs'],
 				'outputs': op['outputs'],
