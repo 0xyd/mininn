@@ -17,7 +17,9 @@ pp = pprint.PrettyPrinter(indent=4)
 model = keras.Sequential([
     keras.layers.InputLayer(input_shape=(5)),
     keras.layers.Dense(5, activation='tanh'),
+    keras.layers.Dense(10, activation='tanh'),
     keras.layers.Dense(5, activation='tanh'),
+    keras.layers.Dense(10, activation='tanh'),
     keras.layers.Dense(5, activation='tanh'),
     keras.layers.Softmax()
 ])
@@ -48,8 +50,6 @@ interpreter.invoke()
 outputResult = interpreter.get_tensor(
 	outputDetails[0]['index']).flatten(
 		).round(decimals=8)
-
-pp.pprint(outputResult)
 
 # Compile generated model 
 subprocess.run(['make'])

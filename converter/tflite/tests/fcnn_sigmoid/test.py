@@ -17,7 +17,9 @@ pp = pprint.PrettyPrinter(indent=4)
 model = keras.Sequential([
     keras.layers.InputLayer(input_shape=(5)),
     keras.layers.Dense(5, activation='sigmoid'),
+    keras.layers.Dense(10, activation='sigmoid'),
     keras.layers.Dense(5, activation='sigmoid'),
+    keras.layers.Dense(10, activation='sigmoid'),
     keras.layers.Dense(5, activation='sigmoid'),
     keras.layers.Softmax()
 ])
@@ -49,8 +51,6 @@ outputResult = interpreter.get_tensor(
 	outputDetails[0]['index']).flatten(
 		).round(decimals=8)
 
-pp.pprint(outputResult)
-
 # Compile generated model 
 subprocess.run(['make'])
 subprocess.run(['./hello'])
@@ -62,4 +62,5 @@ with open('model_output.txt') as f:
 for ov, cv in zip(outputResult, cModelOutput):
 	if abs(ov-cv) > 1e-5:
 		raise ValueError(f"output results between tflite and ikann model is different! tflite: {ov} ; ikann: {cv}")
+
 

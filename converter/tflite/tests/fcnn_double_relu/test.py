@@ -18,7 +18,11 @@ model = keras.Sequential([
     keras.layers.InputLayer(input_shape=(5)),
     keras.layers.Dense(5, activation='relu'),
 	keras.layers.ReLU(),
+	keras.layers.Dense(10, activation='relu'),
+	keras.layers.ReLU(),
     keras.layers.Dense(5, activation='relu'),
+	keras.layers.ReLU(),
+	keras.layers.Dense(10, activation='relu'),
 	keras.layers.ReLU(),
     keras.layers.Dense(5, activation='relu'),
 	keras.layers.ReLU(),    
@@ -51,8 +55,6 @@ interpreter.invoke()
 outputResult = interpreter.get_tensor(
 	outputDetails[0]['index']).flatten(
 		).round(decimals=8)
-
-pp.pprint(outputResult)
 
 # Compile generated model 
 subprocess.run(['make'])
