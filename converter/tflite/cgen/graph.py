@@ -71,7 +71,8 @@ class iKannGraph():
 		data type of weights
 		'''
 
-		data = schema_fb.Model.GetRootAsModel(tfliteModel, 0)
+		data = schema_fb.Model.GetRootAsModel(
+			tfliteModel, 0)
 		data = FlatbufferToDict(
 			schema_fb.ModelT.InitFromObj(data), 
 			preserve_as_numpy=True)
@@ -87,6 +88,8 @@ class iKannGraph():
 			tensors = g['tensors']
 			operators = g['operators']
 			layers = {}
+
+			pp.pprint(g)
 
 			# Indexing operator
 			for idx, op in enumerate(g['operators']):
@@ -137,6 +140,11 @@ class iKannGraph():
 					for l in denseLayers:
 						layers.update(l)
 
+				elif opName == 'CONV_2D':
+					conv2dLayers = self._build_conv2d_layer(op, tensors)
+					for l in conv2dLayers:
+						layers.update(l)
+
 				elif opName == 'LOGISTIC':
 					logitLayer = self._build_logit_layer(op, tensors)
 					layers.update(logitLayer)
@@ -153,7 +161,12 @@ class iKannGraph():
 					softmaxLayer = self._build_softmax_layer(op, tensors)
 					layers.update(softmaxLayer)
 
+				elif opName == 'RESHAPE':
+					reshapeLayer = self._build_reshape_layer(op, tensors)
+					layers.update(reshapeLayer)
+
 				else:
+					print(opName)
 					raise NotImplementedError
 
 			# Link to next layers
@@ -176,6 +189,8 @@ class iKannGraph():
 
 
 			self.g['subgraphs'].append(layers)
+
+			# pp.pprint(layers)
 		
 		return self.g
 
@@ -250,7 +265,88 @@ class iKannGraph():
 			denseLayer[layerId]['nextLayer'] = []
 			return [denseLayer]
 
-	def __build_activation_layer(self, op, opName, tensors):
+	def _build_conv2d_layer(self, op, tensors):
+		'''
+		Build conv2d layer.
+
+
+		'''
+		layerId = op['operatorIdx']
+		conv2dLayer = {
+			layerId: {
+				'name': 'conv2d',
+				'inputs': op['inputs'],
+				'outputs': op['outputs']
+			}
+		}
+
+		for idx in op['inputs']:
+
+			tensor = tensors[idx]
+						
+			# Kernel
+			if len(tensor['shape']) == 4 and 'data' in tensor:
+
+				conv2dLayer[layerId]['weights'] = {
+					'value': tensor['data'],
+					'shape': tensor['shape']
+				}
+				conv2dLayer[layerId]['stride'] = (
+					op['builtinOptions']['strideH'],
+					op['builtinOptions']['strideW'])
+
+				# Conv2d in tensorflow is NHWC,
+				# so index 1 is height
+				# and 2 is width
+				conv2dLayer[layerId]['kernel'] = (
+					tensor['shape'][1], 
+					tensor['shape'][2])
+
+				conv2dLayer[layerId]['filter'] = \
+					tensor['shape'][0]
+
+				# Currently support padding valid only.
+				if op['builtinOptions']['padding'] == 1:
+					conv2dLayer[layerId]['padding'] = (0, 0)
+				else:
+					raise NotImplementedError("SAME padding has't supported yet.")
+
+				self.visitedTensor.add(idx)
+				
+			# Bias 
+			elif 'data' in tensor :
+				conv2dLayer[layerId]['bias'] = {
+					'value': tensor['data'],
+					'shape': tensor['shape']
+				}
+				self.visitedTensor.add(idx)
+			# This is infused activation function, relu
+			else:
+				continue
+			
+		# Relu and dense layer will be fused together in tensorflow lite!
+		# Hence we need to build an additional way to add relu
+		if op['builtinOptions']['fusedActivationFunction']:
+
+			fusedLayerId = 'r' + layerId
+			reluLayer = {
+				fusedLayerId: {
+					'name': 'relu',
+					'outputs': op['outputs'],
+					'nextLayer': []
+				},
+			}
+			conv2dLayer[layerId]['nextLayer'] = [fusedLayerId]
+
+			return [conv2dLayer, reluLayer]
+
+		else:
+			conv2dLayer[layerId]['outputs'] = op['outputs']
+			conv2dLayer[layerId]['nextLayer'] = []
+			return [conv2dLayer]
+
+
+	def __build_simple_layer(self, op, opName, tensors):
 		'''
 		'''
 		idx = op['inputs'][0]
@@ -266,11 +362,16 @@ class iKannGraph():
 		self.visitedTensor.add(idx)
 		return layer
 
+	def _build_reshape_layer(self, op, tensors):
+		'''
+		'''
+		return self.__build_simple_layer(
+			op, 'reshape', tensors)
 
 	def _build_relu_layer(self, op, tensors):
 		'''
 		'''
-		return self.__build_activation_layer(
+		return self.__build_simple_layer(
 			op, 'relu', tensors)
 		# idx = op['inputs'][0]
 		# layer = {
@@ -289,7 +390,7 @@ class iKannGraph():
 	def _build_tanh_layer(self, op, tensors):
 		'''
 		'''
-		return self.__build_activation_layer(
+		return self.__build_simple_layer(
 			op, 'tanh', tensors)
 		# idx = op['inputs'][0]
 		# layer = {
@@ -308,7 +409,7 @@ class iKannGraph():
 	def _build_logit_layer(self, op, tensors):
 		'''
 		'''
-		return self.__build_activation_layer(
+		return self.__build_simple_layer(
 			op, 'logit', tensors)
 		# idx = op['inputs'][0]
 		# layer = {
@@ -326,7 +427,7 @@ class iKannGraph():
 	def _build_softmax_layer(self, op, tensors):
 		'''
 		'''
-		return self.__build_activation_layer(
+		return self.__build_simple_layer(
 			op, 'softmax', tensors)
 		# idx = op['inputs'][0]
 		# layer = {
