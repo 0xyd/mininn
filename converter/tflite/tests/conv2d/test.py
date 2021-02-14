@@ -1,7 +1,5 @@
 import sys
 import pprint
-import pathlib
-import subprocess
 import unittest
 
 import numpy as np
@@ -10,8 +8,13 @@ import tensorflow.keras as keras
 
 sys.path.append('../../')
 
-from cgen.graph import iKannGraph, FlatbufferToDict
-from cgen.snippet import CSnippetGenerator
+from test_helpers import convert_keras_to_tflite 
+from test_helpers import build_ikann_graph
+from test_helpers import build_ikann_graph
+from test_helpers import invoke_tensorflow_lite
+from test_helpers import build_and_execute_c_code
+from test_helpers import generate_c_code
+from test_helpers import compare_results_between_tflite_and_ikann
 
 pp = pprint.PrettyPrinter(indent=4)
 
@@ -31,57 +34,35 @@ class Conv2dTestCase(unittest.TestCase):
 			keras.layers.Softmax()
 		])
 
-		converter = tf.lite.TFLiteConverter.from_keras_model(model)
-		# tfModelsDir = pathlib.Path('.')
-		tfliteModel = converter.convert()
-		# tfliteFile = tfModelsDir/"model.tflite"
-		# tfliteFile.write_bytes(tfliteModel)
+		tfliteModel = convert_keras_to_tflite(model)
 
-		ikannGraph = iKannGraph()
-		graph = ikannGraph.parse(tfliteModel)
+		ikannGraph = build_ikann_graph(tfliteModel)
 
-		cGenerator = CSnippetGenerator(templatePath='../../../templates')
-		cGenerator.build_code(ikannGraph)
+		generate_c_code(ikannGraph)
 
 		## Comparing results between original tflite model and generated ikann model
-		interpreter = tf.lite.Interpreter(model_content=tfliteModel)
-		interpreter.allocate_tensors()
-		inputDetails = interpreter.get_input_details()
-		outputDetails = interpreter.get_output_details()
-
 		inputData = np.array([
-    		[
-        		[1., 2., 3.],
-        		[4., 5., 6.],
-        		[7., 8., 9.],
-    		],
-    		[
-        		[4., 5., 6.],
-        		[1., 2., 3.],
-        		[7., 8., 9.],
-    		],
-    	], dtype=np.float32)
-
+			[
+				[1., 2., 3.],
+				[4., 5., 6.],
+				[7., 8., 9.],
+			],
+			[
+				[4., 5., 6.],
+				[1., 2., 3.],
+				[7., 8., 9.],
+			],
+		], dtype=np.float32)
 		inputData = np.reshape(inputData, (1, 3, 3, 2))
-		interpreter.set_tensor(inputDetails[0]['index'], inputData)
-		interpreter.invoke()
-		outputResult = interpreter.get_tensor(
-		outputDetails[0]['index']).flatten(
-			).round(decimals=8)
 
-		pp.pprint(outputResult)
+		outputResult = invoke_tensorflow_lite(
+			tfliteModel, inputData).flatten().round(decimals=8)
 
 		# Compile generated model and executed it
-		subprocess.run(['make'], check=True)
-		subprocess.run(['./hello'], check=True)
+		build_and_execute_c_code()
 
 		# Compare output results
-		with open('model_output.txt') as f:
-			cModelOutput = [float(v) for v in f.readline().split(',') if len(v) > 0]
-
-		for ov, cv in zip(outputResult, cModelOutput):
-			if abs(ov-cv) > 1e-5:
-				raise ValueError(f"output results between tflite and ikann model is different! tflite: {ov} ; ikann: {cv}")
+		compare_results_between_tflite_and_ikann(outputResult)
 
 	# def test_multiple_conv2d(self):
 	#     pass
