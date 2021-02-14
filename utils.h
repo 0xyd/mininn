@@ -1,0 +1,1 @@
+void conv_nhwc_to_ncwh(int c, int h, int w, float *d);
