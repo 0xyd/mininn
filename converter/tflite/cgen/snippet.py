@@ -107,7 +107,7 @@ class CSnippetGenerator():
 			for i in range(4-_inputShapeLen):
 				_inputShape.append(0)
 
-		if inputFormat != 'nchw':
+		if inputFormat != 'nchw' and dims == 4:
 			_inputShape[1], _inputShape[3] = _inputShape[3], _inputShape[1]
 
 		return template.render(
