@@ -1,11 +1,14 @@
+import os
 import sys
 import pprint
+import inspect
 import unittest
 
 import numpy as np
 import tensorflow as tf
 import tensorflow.keras as keras
 
+sys.path.append('../')
 sys.path.append('../../')
 
 from test_helpers import convert_keras_to_tflite 
@@ -21,7 +24,7 @@ pp = pprint.PrettyPrinter(indent=4)
 class Conv2dTestCase(unittest.TestCase):
 
 	def test_single_conv2d(self):
-
+		
 		model = keras.Sequential([
 			keras.layers.Conv2D(
 			5, 
@@ -38,7 +41,17 @@ class Conv2dTestCase(unittest.TestCase):
 
 		ikannGraph = build_ikann_graph(tfliteModel)
 
-		generate_c_code(ikannGraph)
+
+		# Template path looks different when caller of test is local or global.
+		# First condition is when we test the current test only
+		# Second condition is when we test all cases
+		if os.path.exists('../../../templates'):
+			generate_c_code(
+				ikannGraph, 
+				templatePath='../../../templates',)
+		else:
+			generate_c_code(
+				ikannGraph, templatePath='../../templates', outputPath='conv2d')
 
 		## Comparing results between original tflite model and generated ikann model
 		inputData = np.array([
@@ -59,10 +72,12 @@ class Conv2dTestCase(unittest.TestCase):
 			tfliteModel, inputData).flatten().round(decimals=8)
 
 		# Compile generated model and executed it
-		build_and_execute_c_code()
+		build_and_execute_c_code(codePath='conv2d')
 
 		# Compare output results
 		compare_results_between_tflite_and_ikann(outputResult)
+
+		os.remove('model_output.txt')
 
 	# def test_multiple_conv2d(self):
 	#     pass

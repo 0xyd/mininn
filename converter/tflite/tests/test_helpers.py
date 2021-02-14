@@ -1,3 +1,4 @@
+import os
 import sys
 import tensorflow as tf
 
@@ -37,15 +38,21 @@ def build_ikann_graph(tfliteModel):
 	ikannGraph.parse(tfliteModel)
 	return ikannGraph
 
-def generate_c_code(ikannGraph):
+def generate_c_code(ikannGraph, templatePath, outputPath='.'):
 	'''
 	Generate c code from ikannGraph
 
 	ikannGraph: <dict>
 	ikannGraph contains layers of different operations
+
+	templatePath: <str>
+	templatePath defines path where template locate
+
+	outputPath: <str>
+	outputPath is the path where c code is generated
 	'''
-	cGenerator = CSnippetGenerator(templatePath='../../../templates')
-	cGenerator.build_code(ikannGraph)
+	cGenerator = CSnippetGenerator(templatePath=templatePath)
+	cGenerator.build_code(ikannGraph, outputPath=outputPath)
 
 def invoke_tensorflow_lite(tfliteModel, inputData):
 	'''
@@ -67,13 +74,26 @@ def invoke_tensorflow_lite(tfliteModel, inputData):
 	outputResult = interpreter.get_tensor(outputDetails[0]['index'])
 	return outputResult
 
-def build_and_execute_c_code():
+def build_and_execute_c_code(codePath):
 	'''
 	Build and execute the generated c code.
 
+	codePath: <str>
+	Path where make and binary are.
+
 	'''
-	subprocess.run(['make'], check=True)
-	subprocess.run(['./hello'], check=True)
+
+	if os.path.exists('makefile'):
+		subprocess.run(['make'], check=True)
+		subprocess.run(['./hello'], check=True)
+	else:
+		subprocess.run([
+			'make', '-f', 
+			f'{codePath}/makefile', 
+			f'BASEDIR={codePath}',
+			'IKANN_PATH=../../..'], check=True)
+		subprocess.run([f'./{codePath}/hello'], check=True)
+
 
 def compare_results_between_tflite_and_ikann(tfliteOutput):
 	'''

@@ -4,16 +4,6 @@
 #include "utils.h"
 #include "model.h"
 
-
-// const static float data[] = {
-//     9., 8., 7.,
-//     6., 5., 4.,
-//     3., 2., 1.,
-//     9., 8., 7.,
-//     6., 5., 4.,
-//     3., 2., 1.,
-// };
-
 // Data with two channels
 static float data[] = {
     1., 2., 3.,
@@ -43,7 +33,7 @@ int main(int argc, char *argv[]) {
 	}
 
 	float *y = kann_apply1(nn, data);
-	ccccccc
+	
 	fp = fopen("model_output.txt", "w");
 	for (int i=0; i<10; i++) {
 		fprintf(fp, "%.8f,", y[i]);
