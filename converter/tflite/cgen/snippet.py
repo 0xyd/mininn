@@ -1,3 +1,4 @@
+import pprint as pp
 import numpy as np
 from jinja2 import Environment, FileSystemLoader
 
@@ -50,6 +51,9 @@ class CSnippetGenerator():
 						if layer['name'] == 'dense':
 							codeBlocks.append(self._build_dense(layer))
 
+						elif layer['name'] == 'conv2d':
+							codeBlocks.append(self._build_conv2d(layer))
+
 						elif layer['name'] == 'relu':
 							codeBlocks.append(self._build_relu())
 
@@ -62,10 +66,14 @@ class CSnippetGenerator():
 						elif layer['name'] == 'softmax':
 							codeBlocks.append(self._build_softmax())
 
+						elif layer['name'] == 'reshape':
+							continue
+
 						else:
 							if 'output' in layer['name']:
 								pass
 							else:
+								print(f"layer['name']: {layer['name']}")
 								raise NotImplementedError
 
 					else: break
@@ -112,6 +120,28 @@ class CSnippetGenerator():
 
 		return template.render(
 			weights=weights, bias=bias, output=output)
+
+	def _build_conv2d(self, layer):
+		'''
+		'''
+		template = self.env.get_template('conv2d.c')
+		weights = layer['weights']['value']
+		bias = layer['bias']['value']
+		filters = layer['filters']
+		kernel = layer['kernel']
+		stride = layer['stride']
+		padding = layer['padding']
+
+		return template.render(
+			filters=filters, 
+			kernelH=kernel[0], 
+			kernelW=kernel[1], 
+			strideH=stride[0],
+			strideW=stride[1],
+			paddingH=padding[0],
+			paddingW=padding[1],
+			weights=weights,
+			bias=bias)
 
 	def _build_relu(self):
 		'''
