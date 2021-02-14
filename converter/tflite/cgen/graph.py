@@ -47,7 +47,7 @@ def FlatbufferToDict(fb, preserve_as_numpy):
 
 class iKannGraph():
 
-	def __init__(self):
+	def __init__(self, weightDType=np.float32):
 		'''
 
 		'''
@@ -57,9 +57,9 @@ class iKannGraph():
 		}
 		self.tfliteData = None
 		self.visitedTensor = set()
-		
+		self.weightDType = weightDType
 
-	def parse(self, tfliteModel, dtype=np.float32):
+	def parse(self, tfliteModel):
 		'''
 		Op (operations) are composed of tensors.
 	
@@ -89,7 +89,9 @@ class iKannGraph():
 			operators = g['operators']
 			layers = {}
 
-			pp.pprint(g)
+			# Normalize names from int list to string
+			for t in tensors:
+				t['name'] = self.namelist_to_string(t['name'])
 
 			# Indexing operator
 			for idx, op in enumerate(g['operators']):
@@ -99,15 +101,13 @@ class iKannGraph():
 			for idx, t in enumerate(tensors):
 				d = buffers[t['buffer']]['data']
 				if d is not None:
-					t['data'] = d.view(dtype)
+					t['data'] = d.view(self.weightDType)
 
 			# Build input layers
 			for i in inputs:
 
-				inputName = self.namelist_to_string(
-					tensors[i]['name'])
 				layers[str(i)] = {
-					'name': inputName,
+					'name': tensors[i]['name'],
 					'shape': tensors[i]['shape'],
 					'nextLayer': []
 				}
@@ -187,10 +187,10 @@ class iKannGraph():
 							elif str(o) == _layerId:
 								layerData['nextLayer'].append(_layerId)
 
-
+		
 			self.g['subgraphs'].append(layers)
 
-			# pp.pprint(layers)
+		# pp.pprint(layers)
 		
 		return self.g
 
@@ -220,29 +220,47 @@ class iKannGraph():
 				'outputs': op['outputs']
 			}
 		}
-
+		
 		for idx in op['inputs']:
 
-			name = self.namelist_to_string(
-				tensors[idx]['name'])
+			tensor = tensors[idx]
+			name = tensor['name']
 
 			if 'MatMul' in name and 'BiasAdd' not in name:
 				denseLayer[layerId]['weights'] = {
-					'value': tensors[idx]['data'],
-					'shape': tensors[idx]['shape']
+					'value': tensor['data'],
+					'shape': tensor['shape']
 				}
 				self.visitedTensor.add(str(idx))
 
 			elif 'BiasAdd' in name and \
 				'MatMul' not in name:
 				denseLayer[layerId]['bias'] = {
-					'value': tensors[idx]['data'],
-					'shape': tensors[idx]['shape']
+					'value': tensor['data'],
+					'shape': tensor['shape']
 				}
 				self.visitedTensor.add(str(idx))
 
 			else:
 				continue
+
+		# In some case, bias of dense is in outputs;
+		# For example, when dense is concatenated after a conv2d
+		# and its bias is initialized with 0
+		if 'bias' not in denseLayer[layerId]:
+			for idx in op['outputs']:
+
+				name = tensors[idx]['name']
+				value = np.zeros(
+					tensors[idx]['shape'], 
+					dtype=self.weightDType)
+				value = np.squeeze(value)
+				
+				denseLayer[layerId]['bias'] = {
+					'value': value,
+					'shape': value.shape,
+				}
+				self.visitedTensor.add(str(idx))
 
 		# Relu and dense layer will be fused together in tensorflow lite!
 		# Hence we need to build an additional way to add relu
@@ -302,7 +320,7 @@ class iKannGraph():
 					tensor['shape'][1], 
 					tensor['shape'][2])
 
-				conv2dLayer[layerId]['filter'] = \
+				conv2dLayer[layerId]['filters'] = \
 					tensor['shape'][0]
 
 				# Currently support padding valid only.
@@ -312,7 +330,7 @@ class iKannGraph():
 					raise NotImplementedError("SAME padding has't supported yet.")
 
 				self.visitedTensor.add(idx)
-				
+
 			# Bias 
 			elif 'data' in tensor :
 				conv2dLayer[layerId]['bias'] = {
