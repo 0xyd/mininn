@@ -6,6 +6,7 @@ from conv2d.test import Conv2dTestCase
 from fcnn_relu.test import FcnnReluTestCase
 from fcnn_tanh.test import FcnnTanhTestCase
 from fcnn_sigmoid.test import FcnnSigmTestCase
+from fcnn_double_relu.test import FcnnDoubleReluTestCase
 
 
 def test_all():
@@ -14,6 +15,7 @@ def test_all():
 	suite.addTest(FcnnReluTestCase('test_codegen'))
 	suite.addTest(FcnnSigmTestCase('test_codegen'))
 	suite.addTest(FcnnTanhTestCase('test_codegen'))
+	suite.addTest(FcnnDoubleReluTestCase('test_codegen'))
 	return suite
 
 if __name__ == '__main__':
