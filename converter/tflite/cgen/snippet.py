@@ -86,8 +86,12 @@ class CSnippetGenerator():
 			f.write(self.header.render())
 
 	
-	def _build_input(self, layer):
+	def _build_input(self, layer, inputFormat='nhwc'):
 		'''
+
+		inputFormat: <str>
+		Define input format of the graph, if the format is nhwc,
+		we have to change it to nchw.
 		'''
 		template = self.env.get_template('input.c')
 		_inputShape = []
@@ -102,6 +106,9 @@ class CSnippetGenerator():
 		if _inputShapeLen < 4:
 			for i in range(4-_inputShapeLen):
 				_inputShape.append(0)
+
+		if inputFormat != 'nchw':
+			_inputShape[1], _inputShape[3] = _inputShape[3], _inputShape[1]
 
 		return template.render(
 			dims=dims, 
