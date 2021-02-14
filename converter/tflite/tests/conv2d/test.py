@@ -13,7 +13,6 @@ sys.path.append('../../')
 
 from test_helpers import convert_keras_to_tflite 
 from test_helpers import build_ikann_graph
-from test_helpers import build_ikann_graph
 from test_helpers import invoke_tensorflow_lite
 from test_helpers import build_and_execute_c_code
 from test_helpers import generate_c_code
