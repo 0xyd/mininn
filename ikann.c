@@ -555,7 +555,8 @@ kad_node_t *kann_new_leaf_array(int *offset, kad_node_p *par, uint8_t flag, floa
 		float sdev_inv;
 		sdev_inv = 1.0 / sqrt((float)len / p->d[0]);
 		for (i = 0; i < len; ++i) 
-			p->x[i] = 0.01;
+			p->x[i] = 0.;
+			// p->x[i] = 0.01;
 	}
 	if (off >= 0) par[off] = p, ++(*offset);
 	return p;
