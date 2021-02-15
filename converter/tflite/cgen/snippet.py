@@ -54,6 +54,9 @@ class CSnippetGenerator():
 						elif layer['name'] == 'conv2d':
 							codeBlocks.append(self._build_conv2d(layer))
 
+						elif layer['name'] == 'maxpool2d':
+							codeBlocks.append(self._build_maxpool2d(layer))
+
 						elif layer['name'] == 'relu':
 							codeBlocks.append(self._build_relu())
 
@@ -149,6 +152,21 @@ class CSnippetGenerator():
 			paddingW=padding[1],
 			weights=weights,
 			bias=bias)
+
+	def _build_maxpool2d(self, layer):
+		'''
+		'''
+		template = self.env.get_template('maxpool2d.c')
+		kernel = layer['kernel']
+		stride = layer['stride']
+		padding = layer['padding']
+		return template.render(
+			kernelH=kernel[0], 
+			kernelW=kernel[1], 
+			strideH=stride[0],
+			strideW=stride[1],
+			paddingH=padding[0],
+			paddingW=padding[1])
 
 	def _build_relu(self):
 		'''

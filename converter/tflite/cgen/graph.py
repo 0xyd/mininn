@@ -165,9 +165,12 @@ class iKannGraph():
 					reshapeLayer = self._build_reshape_layer(op, tensors)
 					layers.update(reshapeLayer)
 
+				elif opName == 'MAX_POOL_2D':
+					maxpool2dLayer = self._build_maxpool2d_layer(op, tensors)
+					layers.update(maxpool2dLayer)
 				else:
-					print(opName)
-					raise NotImplementedError
+					raise NotImplementedError(
+						f"operation {opName} has't been implemented yet.")
 
 			# Link to next layers
 			for layerId, layerData in layers.items():
@@ -363,6 +366,28 @@ class iKannGraph():
 			conv2dLayer[layerId]['nextLayer'] = []
 			return [conv2dLayer]
 
+	def _build_maxpool2d_layer(self, op, tensors):
+		'''
+		'''
+		layerId = op['operatorIdx']
+		layer = {
+			layerId: {
+				'name': 'maxpool2d',
+				'inputs': op['inputs'],
+				'outputs': op['outputs'],
+				'kernel': (
+					op['builtinOptions']['filterHeight'], 
+					op['builtinOptions']['filterWidth']),
+				'stride': (
+					op['builtinOptions']['strideH'],
+					op['builtinOptions']['strideW']),
+				'nextLayer': []
+			}
+		}
+		if op['builtinOptions']['padding'] == 1:
+			layer[layerId]['padding'] = (0, 0)
+			
+		return layer
 
 	def __build_simple_layer(self, op, opName, tensors):
 		'''
