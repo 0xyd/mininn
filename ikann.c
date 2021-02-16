@@ -374,16 +374,29 @@ int kad_op_conv2d(kad_node_t *p, int action) /* in the number-channel-height-wid
 	float *t = 0, *q1 = 0, *w1 = 0, *x_padded = 0;
 	int algo_switch = 0;
 
+	// printf("w->d[%d] = %d; w->d[%d] = %d\n", 3, w->d[3], 1, w->d[1]);
+
 	if (action == KAD_FORWARD) { /* allocate working space */
+		// TODO: The condition to trigger nhwc is sooooooo weired!!
 		if (w->d[3] * w->d[1] < 16) {
-			t = (float*)malloc(p->d[3] * sizeof(float));
-			x_padded = aux[1].pad[0] + aux[1].pad[1] > 0? (float*)calloc(q->d[3] + aux[1].pad[0] + aux[1].pad[1], sizeof(float)) : 0;
-		} else {
 			q1 = (float*)malloc(kad_len(q) * sizeof(float));
 			w1 = (float*)malloc(kad_len(w) * sizeof(float));
 			x_padded = aux[1].pad[0] + aux[1].pad[1] > 0? (float*)calloc((q->d[3] + aux[1].pad[0] + aux[1].pad[1]) * q->d[1], sizeof(float)) : 0;
 			algo_switch = 1;
+		} else {
+			t = (float*)malloc(p->d[3] * sizeof(float));
+			x_padded = aux[1].pad[0] + aux[1].pad[1] > 0? (float*)calloc(q->d[3] + aux[1].pad[0] + aux[1].pad[1], sizeof(float)) : 0;
 		}
+		// original
+		// if (w->d[3] * w->d[1] < 16) {
+		// 	t = (float*)malloc(p->d[3] * sizeof(float));
+		// 	x_padded = aux[1].pad[0] + aux[1].pad[1] > 0? (float*)calloc(q->d[3] + aux[1].pad[0] + aux[1].pad[1], sizeof(float)) : 0;
+		// } else {
+		// 	q1 = (float*)malloc(kad_len(q) * sizeof(float));
+		// 	w1 = (float*)malloc(kad_len(w) * sizeof(float));
+		// 	x_padded = aux[1].pad[0] + aux[1].pad[1] > 0? (float*)calloc((q->d[3] + aux[1].pad[0] + aux[1].pad[1]) * q->d[1], sizeof(float)) : 0;
+		// 	algo_switch = 1;
+		// }
 	}
 	if (action == KAD_SYNC_DIM) {
 		if (q->n_d != 4 || w->n_d != 4) return -1;
@@ -540,7 +553,6 @@ kad_node_t *kann_new_leaf_array(int *offset, kad_node_p *par, uint8_t flag, floa
 {
 	int i, len, off = offset && par? *offset : -1;
 	kad_node_t *p;
-
 	if (off >= 0 && par[off]) return par[(*offset)++];
 	p = (kad_node_t*)calloc(1, sizeof(kad_node_t));
 	p->n_d = n_d, p->flag = flag;
@@ -647,11 +659,13 @@ kad_node_t *kann_layer_conv2d(kad_node_t *in, int n_flt, int k_rows, int k_cols,
 	n_flt: number of filters (a.k.a number of output channels)
 	*/
 	kad_node_t *w, *b;
-	w = kann_new_weight_conv2d(n_flt, in->d[1], k_rows, k_cols);
 
+	w = kann_new_weight_conv2d(n_flt, in->d[1], k_rows, k_cols);
+	
 	// Add bias
 	b = kann_new_leaf(KAD_VAR, 0.0f, 1, n_flt);
 
+	// return kad_conv2d(in, w, stride_r, stride_c, pad_r, pad_c);
 	return kad_add(kad_conv2d(in, w, stride_r, stride_c, pad_r, pad_c), b);
 }
 
