@@ -308,23 +308,44 @@ class iKannGraph():
 			# Kernel
 			if len(tensor['shape']) == 4 and 'data' in tensor:
 
-				conv2dLayer[layerId]['weights'] = {
-					'value': tensor['data'],
-					'shape': tensor['shape']
-				}
+
 				conv2dLayer[layerId]['stride'] = (
 					op['builtinOptions']['strideH'],
 					op['builtinOptions']['strideW'])
 
+				filters = tensor['shape'][0]
+				channels = tensor['shape'][-1]
+
 				# Conv2d in tensorflow is NHWC,
 				# so index 1 is height
 				# and 2 is width
-				conv2dLayer[layerId]['kernel'] = (
-					tensor['shape'][1], 
-					tensor['shape'][2])
+				kernelH = tensor['shape'][1]
+				kernelW = tensor['shape'][2]
+				kernelSize = int(kernelH*kernelW)
+				numKernels = int(filters*channels)
 
-				conv2dLayer[layerId]['filters'] = \
-					tensor['shape'][0]
+				conv2dLayer[layerId]['kernel'] = (kernelH, kernelW)
+				conv2dLayer[layerId]['filters'] = filters
+				conv2dLayer[layerId]['channels'] = channels
+
+				# The ikann have different weight allocation of kernel
+				# Therefore, we need to change the order of weight allocation
+				weights = tensor['data']
+				weights = tensor['data'].reshape((filters, -1))
+				newArrangedWeights = []
+				numKernelWeightsPerFilter = int(kernelSize*channels)
+				for n in range(filters):
+					for c in range(channels):
+						w = weights[n, c:numKernelWeightsPerFilter:channels]
+						w = np.flip(w)
+						newArrangedWeights.append(w)
+				
+				newArrangedWeights = np.array(newArrangedWeights).flatten()
+
+				conv2dLayer[layerId]['weights'] = {
+					'value': newArrangedWeights,
+					'shape': tensor['shape']
+				}
 
 				# Currently support padding valid only.
 				if op['builtinOptions']['padding'] == 1:
