@@ -74,17 +74,22 @@ def invoke_tensorflow_lite(tfliteModel, inputData):
 	outputResult = interpreter.get_tensor(outputDetails[0]['index'])
 	return outputResult
 
-def build_and_execute_c_code(codePath):
+def build_and_execute_c_code(codePath, mainFileName='main.c'):
 	'''
 	Build and execute the generated c code.
 
 	codePath: <str>
 	Path where make and binary are.
 
+	mainFileName: <str>
+	main to compile
 	'''
 
 	if os.path.exists('makefile'):
-		subprocess.run(['make'], check=True)
+		subprocess.run([
+			'make', '-f', 'makefile',
+			f'MAIN_FILE={mainFileName}'], 
+			check=True)
 		subprocess.run(['./hello'], check=True)
 	else:
 		subprocess.run([
@@ -95,7 +100,7 @@ def build_and_execute_c_code(codePath):
 		subprocess.run([f'./{codePath}/hello'], check=True)
 
 
-def compare_results_between_tflite_and_ikann(tfliteOutput):
+def compare_results_between_tflite_and_ikann(tfliteOutput, threshold=1e-5):
 	'''
 	Compare inferenced results between tflite model and ikann model
 
@@ -105,6 +110,6 @@ def compare_results_between_tflite_and_ikann(tfliteOutput):
 	with open('model_output.txt') as f:
 		ikannOutput = [float(v) for v in f.readline().split(',') if len(v) > 0]
 	for ov, cv in zip(tfliteOutput, ikannOutput):
-		if abs(ov-cv) > 1e-5:
+		if abs(ov-cv) > threshold:
 			raise ValueError(f"output results between tflite and ikann model is different! tflite: {ov} ; ikann: {cv}")
 

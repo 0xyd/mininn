@@ -12,7 +12,8 @@ from fcnn_double_relu.test import FcnnDoubleReluTestCase
 
 def test_all():
 	suite = unittest.TestSuite()
-	suite.addTest(Conv2dTestCase('test_single_conv2d'))
+	suite.addTest(Conv2dTestCase('test_codegen_with_1_channel'))
+	suite.addTest(Conv2dTestCase('test_codegen_with_3_channels'))
 	suite.addTest(MaxPool2DTestCase('test_codegen'))
 	suite.addTest(FcnnReluTestCase('test_codegen'))
 	suite.addTest(FcnnSigmTestCase('test_codegen'))
