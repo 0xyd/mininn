@@ -69,9 +69,11 @@ class CSnippetGenerator():
 						elif layer['name'] == 'softmax':
 							codeBlocks.append(self._build_softmax())
 
+						elif layer['name'] == 'flatten':
+							codeBlocks.append(self._build_flatten())
+
 						elif layer['name'] == 'reshape':
 							continue
-
 						else:
 							if 'output' in layer['name']:
 								pass
@@ -142,6 +144,12 @@ class CSnippetGenerator():
 		stride = layer['stride']
 		padding = layer['padding']
 
+		# 20200217 Y.D. Add dataformat
+		if layer['dataFormat'] == 'nchw':
+			dataFormat = 0
+		elif layer['dataFormat'] == 'nhwc':
+			dataFormat = 1
+
 		return template.render(
 			filters=filters, 
 			kernelH=kernel[0], 
@@ -151,6 +159,7 @@ class CSnippetGenerator():
 			paddingH=padding[0],
 			paddingW=padding[1],
 			weights=weights,
+			dataFormat=dataFormat,
 			bias=bias)
 
 	def _build_maxpool2d(self, layer):
@@ -192,3 +201,6 @@ class CSnippetGenerator():
 		template = self.env.get_template('softmax.c')
 		return template.render()
 
+	def _build_flatten(self):
+		template = self.env.get_template('flatten.c')
+		return template.render()
