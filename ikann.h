@@ -94,6 +94,7 @@ kad_node_t *kad_sigm(kad_node_t *x); 			   /* f(x) = 1/(1+exp(-x))              
 kad_node_t *kad_tanh(kad_node_t *x);   /* f(x) = (1-exp(-2x)) / (1+exp(-2x)) (element-wise tanh) */
 kad_node_t *kad_relu(kad_node_t *x);   /* f(x) = max{0,x}                    (element-wise rectifier, aka ReLU) */
 kad_node_t *kad_softmax(kad_node_t *x);
+kad_node_t *kad_flatten(kad_node_t *x);
 
 #define KAD_PAD_NONE  0      /* use the smallest zero-padding */
 #define KAD_PAD_SAME  (-2)   /* output to have the same dimension as input */

@@ -254,6 +254,35 @@ int kad_op_softmax(kad_node_t *p, int action)
 	return 0;
 }
 
+// 20200217 Added by Y.D.
+/********** Reshape operations **********/
+int kad_op_flatten(kad_node_t *p, int action) {
+	/*
+	Flatten is not required when use ikann directly. 
+	However, it is necessary when we convert tflite to ikann.
+	The default flatten starts from the first dimension.
+	I haven't implemented from the last dimension yet.
+
+	*/
+	kad_node_t *q = p->child[0];
+	int n = kad_len(q);
+	if (action == KAD_SYNC_DIM) {
+		kad_copy_dim1(p, q);
+	} else if (action == KAD_FORWARD) {
+
+		int i, k = 0, j = k, n1 = q->d[1], n2 = q->d[2], n3 = q->d[3];
+
+		for (i=0; i<n; i++, j+=n2*n3) {
+			if (i % n1 == 0 && i > 0) {
+				k++;
+				j=k;
+			}
+			p->x[i] = q->x[j];
+		}
+	} 
+	return 0;
+}
+
 // Convolutional operation
 /********** 2D convolution **********/
 typedef struct {
@@ -370,7 +399,7 @@ int kad_op_conv2d_nhwc(kad_node_t *p, int action)
 		conv2d_move_1to3(q->d, q->x, q1);
 		conv2d_move_1to3(w->d, w->x, w1);
 		conv2d_loop2(q1, w1, p->x, (*_yy += kad_sdot(m, _ww, _xx)));
-		// conv_rot180(w->d[0] * w->d[1], w->d[2] * w->d[3], w->x);
+		conv_rot180(w->d[0] * w->d[1], w->d[2] * w->d[3], w->x);
 	}
 	free(t); free(q1); free(w1); free(x_padded);
 	return 0;
@@ -506,6 +535,7 @@ kad_op_f kad_op_list[KAD_MAX_OP] = {
 	kad_op_conv2d, 	   /* 8: 2D Concoluional with nchw format*/
 	kad_op_max2d,      /* 9: 2D Maxpooling */
 	kad_op_conv2d_nhwc,  /* 10: 2D Concoluional with nhwc format */
+	kad_op_flatten,    /*11: Flatten */
 };
 
 static inline kad_node_t *kad_finalize_node(kad_node_t *s)  // a helper function 
@@ -545,7 +575,7 @@ KAD_FUNC_OP1(kad_sigm, 4)
 KAD_FUNC_OP1(kad_tanh, 5)
 KAD_FUNC_OP1(kad_relu, 6)
 KAD_FUNC_OP1(kad_softmax, 7)
-
+KAD_FUNC_OP1(kad_flatten, 11)
 
 // This mechanism is not suitable for an inference library
 #define KAD_FUNC_OP2(fname, op) kad_node_t *fname(kad_node_t *x, kad_node_t *y) { return kad_op2_core((op), x, y); }
