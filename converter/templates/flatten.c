@@ -1,0 +1,1 @@
+t = kad_flatten(t);
