@@ -329,6 +329,53 @@ static void conv2d_add_3to1(int d[4], const float *y, float *x) /* convert the N
 		} \
 	} else for (l = 0; l < _wn; ++l) _ww[l] += kad_sdot(_pn, _yy, &_xx[l - _pad]); \
 } while (0)
+
+// 20210217 YD
+int kad_op_conv2d_nhwc(kad_node_t *p, int action)
+{
+#define conv2d_loop2(_x, _w, _y, _code) do { /* for the NHWC shape */ \
+		int n, c1, i, j, k, ii, j_skip = aux[1].stride * q->d[1], m = w->d[3] * w->d[1]; \
+		for (n = 0; n < q->d[0]; ++n) /* mini-batch */ \
+			for (c1 = 0; c1 < w->d[0]; ++c1) /* output channel */ \
+				for (k = 0; k < w->d[2]; ++k) { /* kernel row */ \
+					float *_ww = &(_w)[(c1 * w->d[2] + k) * m]; \
+					for (i = 0, ii = k - aux[0].pad[0]; i < p->d[2] && ii >= 0 && ii < q->d[2]; ++i, ii += aux[0].stride) { /* output and input row */ \
+						float *_xx = &(_x)[(n * q->d[2] + ii) * q->d[3] * q->d[1]]; \
+						float *_yy = &(_y)[((n * p->d[1] + c1) * p->d[2] + i) * p->d[3]]; \
+						if (x_padded) { \
+							memcpy(x_padded + aux[1].pad[0] * q->d[1], _xx, q->d[3] * q->d[1] * sizeof(float)); \
+							_xx = x_padded; \
+						} \
+						for (j = 0; j < p->d[3]; ++j, _xx += j_skip, ++_yy) _code; /* output and input column */ \
+					} /* ~i */ \
+				} /* ~k, c1, n */ \
+	} while (0)
+	conv_conf_t *aux = (conv_conf_t*)p->ptr;
+	kad_node_t *q = p->child[0], *w = p->child[1]; /*q: input*/
+	float *t = 0, *q1 = 0, *w1 = 0, *x_padded = 0;
+
+	if (action == KAD_FORWARD) { /* allocate working space */
+		q1 = (float*)malloc(kad_len(q) * sizeof(float));
+		w1 = (float*)malloc(kad_len(w) * sizeof(float));
+		x_padded = aux[1].pad[0] + aux[1].pad[1] > 0? (float*)calloc((q->d[3] + aux[1].pad[0] + aux[1].pad[1]) * q->d[1], sizeof(float)) : 0;
+	}
+	if (action == KAD_SYNC_DIM) {
+		if (q->n_d != 4 || w->n_d != 4) return -1;
+		if (q->d[1] != w->d[1]) return -1; /* unmatched input channels */
+		p->n_d = 4;
+		p->d[0] = q->d[0], p->d[1] = w->d[0], p->d[2] = conv_out_size(q->d[2], &aux[0]), p->d[3] = conv_out_size(q->d[3], &aux[1]);
+	} else if (action == KAD_FORWARD) {
+		conv_rot180(w->d[0] * w->d[1], w->d[2] * w->d[3], w->x);
+		memset(p->x, 0, kad_len(p) * sizeof(float));
+		conv2d_move_1to3(q->d, q->x, q1);
+		conv2d_move_1to3(w->d, w->x, w1);
+		conv2d_loop2(q1, w1, p->x, (*_yy += kad_sdot(m, _ww, _xx)));
+		// conv_rot180(w->d[0] * w->d[1], w->d[2] * w->d[3], w->x);
+	}
+	free(t); free(q1); free(w1); free(x_padded);
+	return 0;
+}
+
 int kad_op_conv2d(kad_node_t *p, int action) /* in the number-channel-height-width (NCHW) shape */
 {
 #define conv2d_loop1(_x, _w, _y, _tmp, _row_func) do { /* for the NCHW shape */ \
@@ -351,51 +398,39 @@ int kad_op_conv2d(kad_node_t *p, int action) /* in the number-channel-height-wid
 		} \
 	} while (0)
 
-#define conv2d_loop2(_x, _w, _y, _code) do { /* for the NHWC shape */ \
-		int n, c1, i, j, k, ii, j_skip = aux[1].stride * q->d[1], m = w->d[3] * w->d[1]; \
-		for (n = 0; n < q->d[0]; ++n) /* mini-batch */ \
-			for (c1 = 0; c1 < w->d[0]; ++c1) /* output channel */ \
-				for (k = 0; k < w->d[2]; ++k) { /* kernel row */ \
-					float *_ww = &(_w)[(c1 * w->d[2] + k) * m]; \
-					for (i = 0, ii = k - aux[0].pad[0]; i < p->d[2] && ii >= 0 && ii < q->d[2]; ++i, ii += aux[0].stride) { /* output and input row */ \
-						float *_xx = &(_x)[(n * q->d[2] + ii) * q->d[3] * q->d[1]]; \
-						float *_yy = &(_y)[((n * p->d[1] + c1) * p->d[2] + i) * p->d[3]]; \
-						if (x_padded) { \
-							memcpy(x_padded + aux[1].pad[0] * q->d[1], _xx, q->d[3] * q->d[1] * sizeof(float)); \
-							_xx = x_padded; \
-						} \
-						for (j = 0; j < p->d[3]; ++j, _xx += j_skip, ++_yy) _code; /* output and input column */ \
-					} /* ~i */ \
-				} /* ~k, c1, n */ \
-	} while (0)
+// #define conv2d_loop2(_x, _w, _y, _code) do { /* for the NHWC shape */ \
+// 		int n, c1, i, j, k, ii, j_skip = aux[1].stride * q->d[1], m = w->d[3] * w->d[1]; \
+// 		for (n = 0; n < q->d[0]; ++n) /* mini-batch */ \
+// 			for (c1 = 0; c1 < w->d[0]; ++c1) /* output channel */ \
+// 				for (k = 0; k < w->d[2]; ++k) { /* kernel row */ \
+// 					float *_ww = &(_w)[(c1 * w->d[2] + k) * m]; \
+// 					for (i = 0, ii = k - aux[0].pad[0]; i < p->d[2] && ii >= 0 && ii < q->d[2]; ++i, ii += aux[0].stride) { /* output and input row */ \
+// 						float *_xx = &(_x)[(n * q->d[2] + ii) * q->d[3] * q->d[1]]; \
+// 						float *_yy = &(_y)[((n * p->d[1] + c1) * p->d[2] + i) * p->d[3]]; \
+// 						if (x_padded) { \
+// 							memcpy(x_padded + aux[1].pad[0] * q->d[1], _xx, q->d[3] * q->d[1] * sizeof(float)); \
+// 							_xx = x_padded; \
+// 						} \
+// 						for (j = 0; j < p->d[3]; ++j, _xx += j_skip, ++_yy) _code; /* output and input column */ \
+// 					} /* ~i */ \
+// 				} /* ~k, c1, n */ \
+// 	} while (0)
 
 	conv_conf_t *aux = (conv_conf_t*)p->ptr;
 	kad_node_t *q = p->child[0], *w = p->child[1]; /*q: input*/
 	float *t = 0, *q1 = 0, *w1 = 0, *x_padded = 0;
-	int algo_switch = 0;
-
-	// printf("w->d[%d] = %d; w->d[%d] = %d\n", 3, w->d[3], 1, w->d[1]);
 
 	if (action == KAD_FORWARD) { /* allocate working space */
-		// TODO: The condition to trigger nhwc is sooooooo weired!!
-		if (w->d[3] * w->d[1] < 16) {
-			q1 = (float*)malloc(kad_len(q) * sizeof(float));
-			w1 = (float*)malloc(kad_len(w) * sizeof(float));
-			x_padded = aux[1].pad[0] + aux[1].pad[1] > 0? (float*)calloc((q->d[3] + aux[1].pad[0] + aux[1].pad[1]) * q->d[1], sizeof(float)) : 0;
-			algo_switch = 1;
-		} else {
-			t = (float*)malloc(p->d[3] * sizeof(float));
-			x_padded = aux[1].pad[0] + aux[1].pad[1] > 0? (float*)calloc(q->d[3] + aux[1].pad[0] + aux[1].pad[1], sizeof(float)) : 0;
-		}
 		// original
 		// if (w->d[3] * w->d[1] < 16) {
-		// 	t = (float*)malloc(p->d[3] * sizeof(float));
-		// 	x_padded = aux[1].pad[0] + aux[1].pad[1] > 0? (float*)calloc(q->d[3] + aux[1].pad[0] + aux[1].pad[1], sizeof(float)) : 0;
-		// } else {
+		t = (float*)malloc(p->d[3] * sizeof(float));
+		x_padded = aux[1].pad[0] + aux[1].pad[1] > 0? (float*)calloc(q->d[3] + aux[1].pad[0] + aux[1].pad[1], sizeof(float)) : 0;
+		// } 
+		// else {
 		// 	q1 = (float*)malloc(kad_len(q) * sizeof(float));
 		// 	w1 = (float*)malloc(kad_len(w) * sizeof(float));
 		// 	x_padded = aux[1].pad[0] + aux[1].pad[1] > 0? (float*)calloc((q->d[3] + aux[1].pad[0] + aux[1].pad[1]) * q->d[1], sizeof(float)) : 0;
-		// 	algo_switch = 1;
+		// 	// algo_switch = 1;
 		// }
 	}
 	if (action == KAD_SYNC_DIM) {
@@ -406,13 +441,14 @@ int kad_op_conv2d(kad_node_t *p, int action) /* in the number-channel-height-wid
 	} else if (action == KAD_FORWARD) {
 		conv_rot180(w->d[0] * w->d[1], w->d[2] * w->d[3], w->x);
 		memset(p->x, 0, kad_len(p) * sizeof(float));
-		if (!algo_switch) { /* this is the first algorithm */
-			conv2d_loop1(q->x, w->x, p->x, t, process_row_for);
-		} else { /* this is the second algorithm */
-			conv2d_move_1to3(q->d, q->x, q1);
-			conv2d_move_1to3(w->d, w->x, w1);
-			conv2d_loop2(q1, w1, p->x, (*_yy += kad_sdot(m, _ww, _xx)));
-		}
+		conv2d_loop1(q->x, w->x, p->x, t, process_row_for);
+		// if (!algo_switch) { /* this is the first algorithm */
+			
+		// } else { /* this is the second algorithm */
+		// 	conv2d_move_1to3(q->d, q->x, q1);
+		// 	conv2d_move_1to3(w->d, w->x, w1);
+		// 	conv2d_loop2(q1, w1, p->x, (*_yy += kad_sdot(m, _ww, _xx)));
+		// }
 		conv_rot180(w->d[0] * w->d[1], w->d[2] * w->d[3], w->x);
 	}
 	free(t); free(q1); free(w1); free(x_padded);
@@ -467,8 +503,9 @@ kad_op_f kad_op_list[KAD_MAX_OP] = {
 	kad_op_tanh,	   /* 5: */
 	kad_op_relu,	   /* 6: */
 	kad_op_softmax,    /* 7: */
-	kad_op_conv2d, 	   /* 8: 2D Concoluional */
+	kad_op_conv2d, 	   /* 8: 2D Concoluional with nchw format*/
 	kad_op_max2d,      /* 9: 2D Maxpooling */
+	kad_op_conv2d_nhwc,  /* 10: 2D Concoluional with nhwc format */
 };
 
 static inline kad_node_t *kad_finalize_node(kad_node_t *s)  // a helper function 
@@ -628,12 +665,20 @@ static inline conv_conf_t *conv2d_gen_aux(int in_row, int in_col, int kernel_r, 
 	return cnn;
 }
 
-kad_node_t *kad_conv2d(kad_node_t *x, kad_node_t *w, int stride_r, int stride_c, int top_pad, int left_pad)
+kad_node_t *kad_conv2d(kad_node_t *x, kad_node_t *w, int stride_r, int stride_c, int top_pad, int left_pad, uint8_t data_format)
 {
-	// printf("In kad_conv2d\n");
+	/*
+	data_format:
+	Define the input format of data, 
+	0 means the nchw format (ex: pytorch); 
+	1 means nhwc format (ex: tensorflow)
+
+	*/
 	kad_node_t *s;
 	if (x->n_d != 4 || w->n_d != 4) return 0;
-	s = kad_new_core(0, 8, 2);
+	if (data_format == 0) s = kad_new_core(0, 8, 2);
+	else s = kad_new_core(0, 10, 2);
+	
 	s->child[0] = x, s->child[1] = w;
 	s->ptr = conv2d_gen_aux(x->d[2], x->d[3], w->d[2], w->d[3], stride_r, stride_c, top_pad, left_pad);
 	s->ptr_size = sizeof(conv_conf_t) * 2;
@@ -653,10 +698,16 @@ kad_node_t *kad_max2d(kad_node_t *x, int kernel_r, int kernel_c, int stride_r, i
 
 kad_node_t *kann_new_weight_conv2d(int n_out, int n_in, int k_row, int k_col) { return kann_new_leaf(KAD_VAR, 0.0f, 4, n_out, n_in, k_row, k_col); }
 
-kad_node_t *kann_layer_conv2d(kad_node_t *in, int n_flt, int k_rows, int k_cols, int stride_r, int stride_c, int pad_r, int pad_c)
+kad_node_t *kann_layer_conv2d(kad_node_t *in, int n_flt, int k_rows, int k_cols, int stride_r, int stride_c, int pad_r, int pad_c, uint8_t data_format)
 {
 	/*
-	n_flt: number of filters (a.k.a number of output channels)
+	n_flt: 
+	number of filters (a.k.a number of output channels)
+
+	data_format:
+	Define the input format of data, 
+	0 means the nchw format (ex: pytorch); 
+	1 means nhwc format (ex: tensorflow)
 	*/
 	kad_node_t *w, *b;
 
@@ -666,7 +717,7 @@ kad_node_t *kann_layer_conv2d(kad_node_t *in, int n_flt, int k_rows, int k_cols,
 	b = kann_new_leaf(KAD_VAR, 0.0f, 1, n_flt);
 
 	// return kad_conv2d(in, w, stride_r, stride_c, pad_r, pad_c);
-	return kad_add(kad_conv2d(in, w, stride_r, stride_c, pad_r, pad_c), b);
+	return kad_add(kad_conv2d(in, w, stride_r, stride_c, pad_r, pad_c, data_format), b);
 }
 
 /***********************

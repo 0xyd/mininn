@@ -98,7 +98,7 @@ kad_node_t *kad_softmax(kad_node_t *x);
 #define KAD_PAD_NONE  0      /* use the smallest zero-padding */
 #define KAD_PAD_SAME  (-2)   /* output to have the same dimension as input */
 
-kad_node_t *kad_conv2d(kad_node_t *x, kad_node_t *w, int r_stride, int c_stride, int r_pad, int c_pad);             /* 2D convolution with weight matrix flipped */
+kad_node_t *kad_conv2d(kad_node_t *x, kad_node_t *w, int r_stride, int c_stride, int r_pad, int c_pad, uint8_t data_format);             /* 2D convolution with weight matrix flipped */
 kad_node_t *kann_new_weight_conv2d(int n_out, int n_in, int k_row, int k_col);
 kad_node_t *kad_max2d(kad_node_t *x, int kernel_h, int kernel_w, int r_stride, int c_stride, int r_pad, int c_pad); /* 2D max pooling */
 
@@ -107,7 +107,7 @@ kad_node_t *kann_new_leaf2(int *offset, kad_node_p *par, uint8_t flag, float x0_
 kad_node_t *kann_layer_input(int n1);
 kad_node_t *kann_layer_dense(kad_node_t *in, int n1);
 kad_node_t *kann_layer_dense2(int *offset, kad_node_p *par, kad_node_t *in, int n1);
-kad_node_t *kann_layer_conv2d(kad_node_t *in, int n_flt, int k_rows, int k_cols, int stride_r, int stride_c, int pad_r, int pad_c);
+kad_node_t *kann_layer_conv2d(kad_node_t *in, int n_flt, int k_rows, int k_cols, int stride_r, int stride_c, int pad_r, int pad_c, uint8_t data_format);
 
 kann_t *kann_new(kad_node_t *cost, int n_rest, ...);
 const float *kad_eval_at(int n, kad_node_t **a, int from);
