@@ -80,6 +80,8 @@ class iKannGraph():
 		# Buffers are place where weights and bias values are allocated
 		buffers = data['buffers']
 		operatorCodes = data['operatorCodes']
+		# print('operatorCodes:')
+		# pp.pprint(operatorCodes)
 
 		for subgraphIdx, g in enumerate(data["subgraphs"]):
 
@@ -101,7 +103,10 @@ class iKannGraph():
 			for idx, t in enumerate(tensors):
 				d = buffers[t['buffer']]['data']
 				if d is not None:
-					t['data'] = d.view(self.weightDType)
+					if 'flatten/Const' in t['name']:
+						t['data'] = d
+					else:
+						t['data'] = d.view(self.weightDType)
 
 			# Build input layers
 			for i in inputs:
@@ -190,10 +195,7 @@ class iKannGraph():
 							elif str(o) == _layerId:
 								layerData['nextLayer'].append(_layerId)
 
-		
 			self.g['subgraphs'].append(layers)
-
-		# pp.pprint(layers)
 		
 		return self.g
 
@@ -212,6 +214,7 @@ class iKannGraph():
 
 		op <dict>:
 		operators in tflite graph
+
 		'''
 
 		# Choose index that is not been used as index of dense layer
@@ -230,6 +233,7 @@ class iKannGraph():
 			name = tensor['name']
 
 			if 'MatMul' in name and 'BiasAdd' not in name:
+
 				denseLayer[layerId]['weights'] = {
 					'value': tensor['data'],
 					'shape': tensor['shape']
@@ -297,7 +301,8 @@ class iKannGraph():
 			layerId: {
 				'name': 'conv2d',
 				'inputs': op['inputs'],
-				'outputs': op['outputs']
+				'outputs': op['outputs'],
+				'dataFormat': 'nhwc',
 			}
 		}
 
@@ -307,7 +312,6 @@ class iKannGraph():
 						
 			# Kernel
 			if len(tensor['shape']) == 4 and 'data' in tensor:
-
 
 				conv2dLayer[layerId]['stride'] = (
 					op['builtinOptions']['strideH'],
@@ -328,6 +332,12 @@ class iKannGraph():
 				conv2dLayer[layerId]['filters'] = filters
 				conv2dLayer[layerId]['channels'] = channels
 
+				# conv2dLayer[layerId]['weights'] = {
+				# 	'value': tensor['data'],
+				# 	'shape': tensor['shape']
+				# }
+
+				# 20200217. This changed may not be used
 				# The ikann have different weight allocation of kernel
 				# Therefore, we need to change the order of weight allocation
 				weights = tensor['data']
@@ -426,11 +436,39 @@ class iKannGraph():
 		self.visitedTensor.add(idx)
 		return layer
 
+	# Reshape has to be changed ...
 	def _build_reshape_layer(self, op, tensors):
 		'''
 		'''
-		return self.__build_simple_layer(
+		layer = self.__build_simple_layer(
 			op, 'reshape', tensors)
+
+		# layerMeta = layer[op['operatorIdx']]
+
+		isFlatten = False
+		print('output tensors of reshape layer:')
+		for i in op['outputs']:
+			pp.pprint(tensors[i])
+			print('-'*5)
+			if 'flatten/Reshape' in tensors[i]['name']:
+				isFlatten = True
+
+		# print('input tensors of reshape layer:')
+		# for i in op['inputs']:
+		# 	pp.pprint(tensors[i])
+		# 	print('-'*5)
+		# 	if isFlatten and len(tensors[i]['shape']) > 1:
+		# 		layerMeta['reshapeOrder'] = np.flip(tensors[i]['shape'])
+
+		# print('reshape layer ...')
+		# pp.pprint(layer)
+
+		if isFlatten:
+			return self.__build_simple_layer(
+				op, 'flatten', tensors)
+		else:
+			return self.__build_simple_layer(
+				op, 'flatten', tensors)
 
 	def _build_relu_layer(self, op, tensors):
 		'''
